@@ -10,12 +10,7 @@ export default defineConfig({
   build: {
     rollupOptions: {
       external: [
-        'react',
-        'react-dom',
-        'three',
-        'd3',
-        'katex',
-        '@google/genai'
+        // Core dependencies should be bundled into the application for deployment
       ],
     },
   },

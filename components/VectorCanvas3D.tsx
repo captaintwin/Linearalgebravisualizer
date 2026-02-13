@@ -1,14 +1,13 @@
 
 import React, { useEffect, useRef, useMemo } from 'react';
 import * as THREE from 'three';
-import { OrbitControls } from 'https://esm.sh/three@0.170.0/examples/jsm/controls/OrbitControls.js';
-import { DragControls } from 'https://esm.sh/three@0.170.0/examples/jsm/controls/DragControls.js';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { DragControls } from 'three/addons/controls/DragControls.js';
 import { Vector3D, Matrix3x3 } from '../types';
 
 interface VectorCanvas3DProps {
   matrix: Matrix3x3;
   vectors: Vector3D[];
-  // Fix: changed setVectors type to support functional updates (React.Dispatch)
   setVectors: React.Dispatch<React.SetStateAction<Vector3D[]>>;
   showGrid: boolean;
 }
@@ -18,7 +17,6 @@ const VectorCanvas3D: React.FC<VectorCanvas3DProps> = ({ matrix, vectors, setVec
   const vectorsRef = useRef(vectors);
   const matrixRef = useRef(matrix);
 
-  // Синхронизируем рефы с пропсами для использования внутри колбэков Three.js без триггера эффектов
   useEffect(() => { vectorsRef.current = vectors; }, [vectors]);
   useEffect(() => { matrixRef.current = matrix; }, [matrix]);
 
@@ -46,7 +44,6 @@ const VectorCanvas3D: React.FC<VectorCanvas3DProps> = ({ matrix, vectors, setVec
     return [[inv[0], inv[1], inv[2]], [inv[3], inv[4], inv[5]], [inv[6], inv[7], inv[8]]] as Matrix3x3;
   }, [matrix]);
 
-  // Инициализация базовой сцены (один раз)
   useEffect(() => {
     if (!containerRef.current) return;
     const width = containerRef.current.clientWidth;
@@ -92,12 +89,10 @@ const VectorCanvas3D: React.FC<VectorCanvas3DProps> = ({ matrix, vectors, setVec
     };
   }, []);
 
-  // Обновление векторов и управления перетаскиванием
   useEffect(() => {
     const s = sceneObjects.current;
     if (!s) return;
 
-    // Очистка старых объектов
     s.handles.forEach(h => s.scene.remove(h));
     s.arrows.forEach(a => s.scene.remove(a));
     s.dragControls?.dispose();
@@ -113,7 +108,6 @@ const VectorCanvas3D: React.FC<VectorCanvas3DProps> = ({ matrix, vectors, setVec
     const handleToIndex = new Map<THREE.Object3D, number>();
 
     vectors.forEach((v, idx) => {
-      // Трансформированная позиция кончика
       const tx = v.x * matrix[0][0] + v.y * matrix[0][1] + v.z * matrix[0][2];
       const ty = v.x * matrix[1][0] + v.y * matrix[1][1] + v.z * matrix[1][2];
       const tz = v.x * matrix[2][0] + v.y * matrix[2][1] + v.z * matrix[2][2];
@@ -126,8 +120,7 @@ const VectorCanvas3D: React.FC<VectorCanvas3DProps> = ({ matrix, vectors, setVec
       s.scene.add(arrow);
       arrows.push(arrow);
 
-      // Увеличенный хендлер для захвата (0.4 вместо 0.2)
-      const hGeom = new THREE.SphereGeometry(0.4, 16, 16);
+      const hGeom = new THREE.SphereGeometry(0.3, 16, 16);
       const hMat = new THREE.MeshBasicMaterial({ color: v.color, transparent: true, opacity: 0 });
       const handle = new THREE.Mesh(hGeom, hMat);
       handle.position.set(tx, ty, tz);
@@ -145,9 +138,8 @@ const VectorCanvas3D: React.FC<VectorCanvas3DProps> = ({ matrix, vectors, setVec
     drag.addEventListener('dragstart', (e: any) => {
       s.orbit.enabled = false;
       const mesh = e.object as THREE.Mesh;
-      // Fix: Cast to MeshBasicMaterial to access opacity property as base Material type doesn't guarantee it
       if (mesh.material instanceof THREE.MeshBasicMaterial) {
-        mesh.material.opacity = 0.3; // Подсвечиваем при захвате
+        mesh.material.opacity = 0.3;
       }
     });
 
@@ -157,13 +149,10 @@ const VectorCanvas3D: React.FC<VectorCanvas3DProps> = ({ matrix, vectors, setVec
       if (idx === undefined || !inverseMatrix) return;
 
       const pos = handle.position;
-      
-      // Обратное преобразование координат для обновления базового вектора
       const bx = pos.x * inverseMatrix[0][0] + pos.y * inverseMatrix[0][1] + pos.z * inverseMatrix[0][2];
       const by = pos.x * inverseMatrix[1][0] + pos.y * inverseMatrix[1][1] + pos.z * inverseMatrix[1][2];
       const bz = pos.x * inverseMatrix[2][0] + pos.y * inverseMatrix[2][1] + pos.z * inverseMatrix[2][2];
 
-      // Обновляем визуализацию стрелки немедленно для плавности
       const arrow = s.arrows[idx];
       const newDir = new THREE.Vector3(pos.x, pos.y, pos.z);
       const newLen = Math.max(newDir.length(), 0.001);
@@ -171,7 +160,6 @@ const VectorCanvas3D: React.FC<VectorCanvas3DProps> = ({ matrix, vectors, setVec
       arrow.setDirection(newDir);
       arrow.setLength(newLen, 0.4, 0.2);
 
-      // Обновляем состояние React (используем функциональное обновление для стабильности)
       setVectors(prev => {
         const next = [...prev];
         next[idx] = { ...next[idx], x: Number(bx.toFixed(2)), y: Number(by.toFixed(2)), z: Number(bz.toFixed(2)) };
@@ -182,14 +170,12 @@ const VectorCanvas3D: React.FC<VectorCanvas3DProps> = ({ matrix, vectors, setVec
     drag.addEventListener('dragend', (e: any) => {
       s.orbit.enabled = true;
       const mesh = e.object as THREE.Mesh;
-      // Fix: Cast to MeshBasicMaterial to access opacity property as base Material type doesn't guarantee it
       if (mesh.material instanceof THREE.MeshBasicMaterial) {
         mesh.material.opacity = 0;
       }
     });
 
-  }, [vectors.length, matrix, showGrid, inverseMatrix, setVectors]); 
-  // Важно: vectors.length в зависимостях вместо всего массива, чтобы избежать циклического пересоздания DragControls при drag-собитии
+  }, [vectors.length, matrix, showGrid, inverseMatrix, setVectors]);
 
   return (
     <div className="w-full h-full rounded-xl border border-slate-800 overflow-hidden shadow-2xl relative group bg-slate-950">

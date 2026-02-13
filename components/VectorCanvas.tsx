@@ -103,8 +103,8 @@ const VectorCanvas: React.FC<VectorCanvasProps> = ({ matrix, vectors, setVectors
         .style('pointer-events', 'none');
 
       vg.call(d3.drag<SVGGElement, any>().on('drag', (event) => {
-        // Ключевое исправление: используем d3.pointer относительно SVG, 
-        // чтобы избежать накопленных смещений от вложенных элементов <g>
+        // Critical fix: use d3.pointer relative to the SVG root to avoid accumulated offsets from nested <g> elements
+        if (!svgRef.current) return;
         const [ptrX, ptrY] = d3.pointer(event, svgRef.current);
         
         const mx = xScale.invert(ptrX);
@@ -112,7 +112,7 @@ const VectorCanvas: React.FC<VectorCanvasProps> = ({ matrix, vectors, setVectors
         
         let rx = mx, ry = my;
         if (inverseMatrix) {
-          // Вычисляем координаты исходного вектора через обратную матрицу
+          // Calculate source vector coordinates using the inverse matrix transformation
           rx = mx * inverseMatrix[0][0] + my * inverseMatrix[0][1];
           ry = mx * inverseMatrix[1][0] + my * inverseMatrix[1][1];
         }

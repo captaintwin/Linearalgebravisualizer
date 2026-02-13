@@ -37,18 +37,9 @@ const App: React.FC = () => {
         if (data.vectors3D) setVectors3D(data.vectors3D);
       }
     } catch (e) {
-      console.warn("Failed to restore state from URL", e);
+      console.warn("Restore failed", e);
     }
   }, []);
-
-  const handleShare = () => {
-    const state = { mode, matrix2D, vectors2D, matrix3D, vectors3D };
-    const hash = btoa(JSON.stringify(state));
-    window.location.hash = hash;
-    navigator.clipboard.writeText(window.location.href).then(() => {
-      alert("Link copied to clipboard!");
-    });
-  };
 
   const handleAnalyze = async () => {
     setLoadingInsights(true);
@@ -58,7 +49,7 @@ const App: React.FC = () => {
       const result = await getMatrixInsights(matrix, vectors);
       setInsight(result);
     } catch (err) {
-      console.error("Analysis failed:", err);
+      console.error("Analysis failed", err);
     } finally {
       setLoadingInsights(false);
     }
@@ -69,102 +60,75 @@ const App: React.FC = () => {
       const [[a, b], [c, d]] = matrix2D;
       const det = a * d - b * c;
       const trace = a + d;
-      const normA = Math.sqrt(a*a + b*b + c*c + d*d);
-      return { det, trace, norm: normA };
+      return { det, trace };
     } else {
       const m = matrix3D.flat();
       const det = m[0]*(m[4]*m[8]-m[5]*m[7]) - m[1]*(m[3]*m[8]-m[5]*m[6]) + m[2]*(m[3]*m[7]-m[4]*m[6]);
       const trace = matrix3D[0][0] + matrix3D[1][1] + matrix3D[2][2];
-      const norm = Math.sqrt(m.reduce((acc, v) => acc + v*v, 0));
-      return { det, trace, norm };
+      return { det, trace };
     }
   }, [matrix2D, matrix3D, mode]);
 
-  const transformationMainFormula = useMemo(() => {
+  const headerFormula = useMemo(() => {
     if (mode === '2D') {
       const [[a, b], [c, d]] = matrix2D;
-      const v = vectors2D[2] || vectors2D[0];
+      const v = vectors2D[2] || vectors2D[0] || { x: 0, y: 0 };
       const rx = a * v.x + b * v.y;
       const ry = c * v.x + d * v.y;
       return `\\begin{pmatrix} ${a} & ${b} \\\\ ${c} & ${d} \\end{pmatrix} \\begin{pmatrix} ${v.x} \\\\ ${v.y} \\end{pmatrix} = \\begin{pmatrix} ${rx.toFixed(1)} \\\\ ${ry.toFixed(1)} \\end{pmatrix}`;
-    } else {
-      const v = vectors3D[0];
-      return `\\text{3D Projection: } \\vec{v} \\to \\vec{v}'`;
     }
+    return `\\text{3D Matrix Engine}`;
   }, [matrix2D, vectors2D, mode]);
 
-  const handleMultiply = () => {
-    if (mode === '2D') {
-      const A = matrix2D;
-      const B = matrixB2D;
-      const result: Matrix2x2 = [
-        [A[0][0] * B[0][0] + A[0][1] * B[1][0], A[0][0] * B[0][1] + A[0][1] * B[1][1]],
-        [A[1][0] * B[0][0] + A[1][1] * B[1][0], A[1][0] * B[0][1] + A[1][1] * B[1][1]]
-      ];
-      setMatrix2D(result);
-    }
-  };
-
-  const handleTranspose = () => {
-    if (mode === '2D') {
-      setMatrix2D([[matrix2D[0][0], matrix2D[1][0]], [matrix2D[0][1], matrix2D[1][1]]]);
-    } else {
-      setMatrix3D([
-        [matrix3D[0][0], matrix3D[1][0], matrix3D[2][0]],
-        [matrix3D[0][1], matrix3D[1][1], matrix3D[2][1]],
-        [matrix3D[0][2], matrix3D[1][2], matrix3D[2][2]]
-      ]);
-    }
-  };
-
-  const handleResetMatrix = () => mode === '2D' ? setMatrix2D([[1, 0], [0, 1]]) : setMatrix3D([[1,0,0],[0,1,0],[0,0,1]]);
-  const handleResetVector = (i: number) => {
-    if (mode === '2D') {
-      const v = [...vectors2D]; v[i] = {...INITIAL_VECTORS_2D[i]}; setVectors2D(v);
-    } else {
-      const v = [...vectors3D]; v[i] = {...INITIAL_VECTORS_3D[i]}; setVectors3D(v);
-    }
-  };
-
   return (
-    <div className="flex flex-col h-screen max-h-screen bg-slate-950 text-slate-100 overflow-hidden">
-      <header className="bg-slate-900/80 backdrop-blur-md border-b border-slate-800 px-4 py-3 flex items-center justify-between z-20 shrink-0">
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 bg-indigo-600 rounded flex items-center justify-center">
-            <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-            </svg>
+    <div className="flex flex-col h-screen max-h-screen bg-[#020617] text-slate-100 overflow-hidden font-sans">
+      <header className="bg-slate-900/50 backdrop-blur-md border-b border-white/5 px-6 py-4 flex items-center justify-between z-20">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 bg-indigo-500 rounded-lg shadow-lg shadow-indigo-500/20 flex items-center justify-center">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M4 6h16M4 12h16m-7 6h7" /></svg>
           </div>
-          <h1 className="text-lg font-black text-white tracking-tight hidden sm:block">Linear Matrix Lab</h1>
+          <h1 className="text-sm font-black uppercase tracking-tighter">Linear Lab <span className="text-indigo-400">v1.2</span></h1>
         </div>
-        <div className="flex bg-slate-800 rounded-lg p-1 border border-slate-700">
-          {['2D', '3D'].map(m => (
-            <button key={m} onClick={() => setMode(m as DimensionMode)} className={`px-4 py-1 rounded text-[10px] font-bold transition-all ${mode === m ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'}`}>{m}</button>
+        <div className="flex bg-slate-800/50 rounded-full p-1 border border-white/5">
+          {(['2D', '3D'] as DimensionMode[]).map(m => (
+            <button key={m} onClick={() => setMode(m)} className={`px-6 py-1 rounded-full text-[10px] font-black transition-all ${mode === m ? 'bg-indigo-600 shadow-md text-white' : 'text-slate-400 hover:text-white'}`}>{m}</button>
           ))}
         </div>
       </header>
 
-      <main className="flex-1 flex flex-col lg:flex-row overflow-hidden relative">
-        <div className="flex-[1.2] lg:flex-1 p-3 lg:p-6 flex flex-col gap-6 overflow-y-auto order-1 lg:order-2 bg-slate-950 relative z-10">
-          <div className="h-64 sm:h-80 md:h-[450px] lg:flex-1 relative group shrink-0">
-            {/* Main Formula Overlay */}
-            <div className="absolute top-4 left-4 z-30 bg-slate-900/80 backdrop-blur-xl border border-white/5 p-4 rounded-xl shadow-2xl transition-all hover:bg-slate-900/90 group-hover:border-indigo-500/40 max-w-[90%] overflow-x-auto">
-               <div className="text-[10px] text-indigo-400 font-black uppercase tracking-widest mb-2 flex items-center gap-2">
-                 <div className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse" />
-                 Global Transformation View
-               </div>
-               <MathFormula formula={transformationMainFormula} className="text-sm md:text-base text-white font-mono whitespace-nowrap" />
+      <main className="flex-1 flex flex-col lg:row overflow-hidden relative lg:flex-row">
+        <aside className="lg:w-96 border-r border-white/5 flex flex-col bg-slate-900/20 z-10 shrink-0">
+          <ControlPanel 
+            mode={mode}
+            matrix2D={matrix2D} setMatrix2D={setMatrix2D}
+            matrixB2D={matrixB2D} setMatrixB2D={setMatrixB2D}
+            matrix3D={matrix3D} setMatrix3D={setMatrix3D}
+            vectors2D={vectors2D} setVectors2D={setVectors2D}
+            vectors3D={vectors3D} setVectors3D={setVectors3D}
+            showGrid={showGrid} setShowGrid={setShowGrid}
+            onResetMatrix={() => mode === '2D' ? setMatrix2D(INITIAL_MATRIX_2D) : setMatrix3D(INITIAL_MATRIX_3D)}
+            onResetVector={(i) => mode === '2D' ? setVectors2D(v => { const n = [...v]; n[i] = {...INITIAL_VECTORS_2D[i]}; return n; }) : setVectors3D(v => { const n = [...v]; n[i] = {...INITIAL_VECTORS_3D[i]}; return n; })}
+            onResetAll={() => { setMatrix2D(INITIAL_MATRIX_2D); setMatrix3D(INITIAL_MATRIX_3D); setVectors2D([...INITIAL_VECTORS_2D]); setVectors3D([...INITIAL_VECTORS_3D]); setInsight(null); window.location.hash = ''; }}
+            onTranspose={() => mode === '2D' ? setMatrix2D([[matrix2D[0][0], matrix2D[1][0]], [matrix2D[0][1], matrix2D[1][1]]]) : setMatrix3D([[matrix3D[0][0], matrix3D[1][0], matrix3D[2][0]], [matrix3D[0][1], matrix3D[1][1], matrix3D[2][1]], [matrix3D[0][2], matrix3D[1][2], matrix3D[2][2]]])}
+            onMultiply={() => { if(mode==='2D'){const A=matrix2D,B=matrixB2D;setMatrix2D([[A[0][0]*B[0][0]+A[0][1]*B[1][0], A[0][0]*B[0][1]+A[0][1]*B[1][1]],[A[1][0]*B[0][0]+A[1][1]*B[1][0], A[1][0]*B[0][1]+A[1][1]*B[1][1]]])}}}
+            onShare={() => {const hash=btoa(JSON.stringify({mode,matrix2D,vectors2D,matrix3D,vectors3D})); window.location.hash=hash; navigator.clipboard.writeText(window.location.href).then(()=>alert("Copied!"))}}
+          />
+        </aside>
+
+        <section className="flex-1 flex flex-col p-6 gap-6 overflow-y-auto bg-slate-950">
+          <div className="h-[400px] lg:h-auto lg:flex-1 relative rounded-3xl border border-white/5 overflow-hidden shadow-2xl">
+            <div className="absolute top-6 left-6 z-30 pointer-events-none">
+              <div className="bg-slate-900/80 backdrop-blur-xl border border-white/10 p-4 rounded-2xl shadow-2xl">
+                <div className="text-[10px] text-indigo-400 font-black uppercase mb-2 tracking-widest">Transformation Matrix</div>
+                <MathFormula formula={headerFormula} className="text-white text-base md:text-xl font-mono" />
+              </div>
             </div>
 
-            <div className="absolute top-4 right-4 z-30 flex flex-col gap-2 pointer-events-none">
-              <div className="bg-slate-900/80 backdrop-blur-md border border-slate-700 p-3 rounded-lg shadow-2xl min-w-[140px]">
-                <div className="flex justify-between items-center mb-2"><span className="text-[10px] text-slate-500 font-bold uppercase">Matrix Analysis</span></div>
-                <div className="space-y-1">
-                  <div className="flex justify-between"><span className="text-[10px] text-slate-400">Determinant</span><span className={`text-xs font-mono ${Math.abs(matrixStats.det) < 0.01 ? 'text-rose-400' : 'text-emerald-400'}`}>{matrixStats.det.toFixed(2)}</span></div>
-                  <div className="flex justify-between"><span className="text-[10px] text-slate-400">Trace</span><span className="text-xs font-mono text-indigo-400">{matrixStats.trace.toFixed(2)}</span></div>
-                  <div className="flex justify-between"><span className="text-[10px] text-slate-400">Frobenius Norm</span><span className="text-xs font-mono text-orange-400">{matrixStats.norm.toFixed(2)}</span></div>
-                </div>
-              </div>
+            <div className="absolute bottom-6 right-6 z-30 pointer-events-none">
+               <div className="bg-slate-900/80 backdrop-blur-md border border-white/5 p-4 rounded-xl shadow-xl space-y-2 min-w-[120px]">
+                 <div className="flex justify-between items-center text-[10px] uppercase font-bold text-slate-500"><span>det(A)</span><span className="text-indigo-400 font-mono">{matrixStats.det.toFixed(2)}</span></div>
+                 <div className="flex justify-between items-center text-[10px] uppercase font-bold text-slate-500"><span>tr(A)</span><span className="text-emerald-400 font-mono">{matrixStats.trace.toFixed(2)}</span></div>
+               </div>
             </div>
 
             {mode === '2D' ? (
@@ -174,48 +138,15 @@ const App: React.FC = () => {
             )}
           </div>
 
-          <div className="shrink-0 space-y-4">
-            {!insight && !loadingInsights ? (
-              <button 
-                onClick={handleAnalyze}
-                className="w-full py-4 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-black uppercase tracking-widest shadow-lg transition-all flex items-center justify-center gap-3 active:scale-95"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                </svg>
-                Analyze Transformation with Gemini
+          <div className="shrink-0 max-w-4xl mx-auto w-full">
+            {insight ? <GeminiInsights insight={insight} loading={loadingInsights} /> : (
+              <button onClick={handleAnalyze} className="w-full py-5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-2xl font-black uppercase tracking-widest transition-all shadow-xl shadow-indigo-600/20 active:scale-95">
+                {loadingInsights ? 'Processing Matrix Analysis...' : 'Deep Dive with Gemini AI'}
               </button>
-            ) : (
-              <GeminiInsights insight={insight} loading={loadingInsights} />
             )}
-            {insight && !loadingInsights && (
-               <button 
-                 onClick={() => setInsight(null)}
-                 className="text-[10px] text-slate-500 hover:text-slate-300 font-bold uppercase tracking-widest w-full text-center py-2 transition-colors"
-               >
-                 Clear Analysis
-               </button>
-            )}
+            {insight && <button onClick={()=>setInsight(null)} className="mt-4 text-[10px] text-slate-500 uppercase font-black w-full hover:text-slate-300">Reset Insights</button>}
           </div>
-        </div>
-
-        <aside className="flex-1 lg:w-96 bg-slate-900/40 border-t lg:border-t-0 lg:border-r border-slate-800 overflow-hidden order-2 lg:order-1 flex flex-col">
-          <ControlPanel 
-            mode={mode}
-            matrix2D={matrix2D} setMatrix2D={setMatrix2D}
-            matrixB2D={matrixB2D} setMatrixB2D={setMatrixB2D}
-            matrix3D={matrix3D} setMatrix3D={setMatrix3D}
-            vectors2D={vectors2D} setVectors2D={setVectors2D}
-            vectors3D={vectors3D} setVectors3D={setVectors3D}
-            showGrid={showGrid} setShowGrid={setShowGrid}
-            onResetMatrix={handleResetMatrix}
-            onResetVector={handleResetVector}
-            onResetAll={() => { handleResetMatrix(); setVectors2D([...INITIAL_VECTORS_2D]); setInsight(null); window.location.hash = ''; }}
-            onTranspose={handleTranspose}
-            onMultiply={handleMultiply}
-            onShare={handleShare}
-          />
-        </aside>
+        </section>
       </main>
     </div>
   );
