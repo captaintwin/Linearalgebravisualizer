@@ -1,12 +1,30 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Linear Matrix Lab</title>
+  <title>Linear Algebra Explorer</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+  <!-- MathJax для надежного рендеринга формул -->
+  <script>
+    window.MathJax = {
+      tex: {
+        inlineMath: [['$', '$'], ['\\(', '\\)']],
+        displayMath: [['$$', '$$'], ['\\[', '\\]']],
+        processEscapes: true
+      },
+      options: {
+        enableMenu: false
+      },
+      startup: {
+        ready: () => {
+          window.MathJax.startup.defaultReady();
+          window.mathjaxReady = true;
+        }
+      }
+    };
+  </script>
+  <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
   <script>
     window.process = { env: { API_KEY: "" } };
   </script>
@@ -19,7 +37,6 @@
     "three": "https://esm.sh/three@0.170.0",
     "three/addons/": "https://esm.sh/three@0.170.0/examples/jsm/",
     "d3": "https://esm.sh/d3@7.9.0",
-    "katex": "https://esm.sh/katex@0.16.11",
     "@google/genai": "https://esm.sh/@google/genai@1.41.0",
     "react-dom/": "https://esm.sh/react-dom@^19.2.4/",
     "react/": "https://esm.sh/react@^19.2.4/",
@@ -29,19 +46,8 @@
   }
 }
 </script>
-<style>
-  body { background-color: #020617; color: #f8fafc; }
-  .katex-display { margin: 0.5em 0; }
-  canvas { display: block; }
-  .katex { font-size: 1.1em; line-height: 1.2; }
-  /* Custom scrollbar for better look */
-  ::-webkit-scrollbar { width: 4px; }
-  ::-webkit-scrollbar-track { background: transparent; }
-  ::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
-  ::-webkit-scrollbar-thumb:hover { background: #475569; }
-</style>
 </head>
-<body class="min-h-screen overflow-x-hidden">
+<body class="bg-slate-950 text-slate-100 min-h-screen overflow-x-hidden">
   <div id="root"></div>
   <script type="module" src="./index.tsx"></script>
 </body>

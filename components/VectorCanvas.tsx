@@ -6,12 +6,19 @@ import { Vector2D, Matrix2x2 } from '../types';
 interface VectorCanvasProps {
   matrix: Matrix2x2;
   vectors: Vector2D[];
-  // Fix: changed setVectors type to React.Dispatch for consistency with 3D canvas and better state management
   setVectors: React.Dispatch<React.SetStateAction<Vector2D[]>>;
   showGrid: boolean;
+  showOriginalGrid: boolean;
+  gridColor: string;
+  originalGridColor: string;
+  gridThickness: number;
+  originalGridThickness: number;
 }
 
-const VectorCanvas: React.FC<VectorCanvasProps> = ({ matrix, vectors, setVectors, showGrid }) => {
+const VectorCanvas: React.FC<VectorCanvasProps> = ({ 
+  matrix, vectors, setVectors, showGrid, showOriginalGrid, 
+  gridColor, originalGridColor, gridThickness, originalGridThickness 
+}) => {
   const svgRef = useRef<SVGSVGElement>(null);
   
   const inverseMatrix = useMemo(() => {
@@ -36,7 +43,30 @@ const VectorCanvas: React.FC<VectorCanvasProps> = ({ matrix, vectors, setVectors
     svg.selectAll('*').remove();
     const g = svg.append('g');
 
-    // Visualizing Determinant (Area)
+    // 1. Отрисовка оригинальной (статичной) сетки
+    if (showOriginalGrid) {
+      const originalGridG = g.append('g').attr('class', 'original-grid');
+      d3.range(-extent, extent + 1).forEach(i => {
+        // Вертикальные линии
+        originalGridG.append('line')
+          .attr('x1', xScale(i)).attr('y1', yScale(-extent))
+          .attr('x2', xScale(i)).attr('y2', yScale(extent))
+          .attr('stroke', originalGridColor)
+          .attr('stroke-width', originalGridThickness)
+          .attr('stroke-dasharray', '2,2')
+          .attr('opacity', 0.6);
+        // Горизонтальные линии
+        originalGridG.append('line')
+          .attr('x1', xScale(-extent)).attr('y1', yScale(i))
+          .attr('x2', xScale(extent)).attr('y2', yScale(i))
+          .attr('stroke', originalGridColor)
+          .attr('stroke-width', originalGridThickness)
+          .attr('stroke-dasharray', '2,2')
+          .attr('opacity', 0.6);
+      });
+    }
+
+    // 2. Визуализация определителя (площадь трансформации)
     const i_t = { x: 1 * matrix[0][0], y: 1 * matrix[1][0] };
     const j_t = { x: 1 * matrix[0][1], y: 1 * matrix[1][1] };
     const k_t = { x: i_t.x + j_t.x, y: i_t.y + j_t.y };
@@ -53,22 +83,23 @@ const VectorCanvas: React.FC<VectorCanvasProps> = ({ matrix, vectors, setVectors
       .attr('stroke-dasharray', '4,4')
       .attr('opacity', 0.3);
 
-    // Grid & Axes
+    // 3. Трансформированная сетка
     if (showGrid) {
       d3.range(-extent, extent + 1).forEach(x => {
         const tS = { x: x * matrix[0][0] + (-extent) * matrix[0][1], y: x * matrix[1][0] + (-extent) * matrix[1][1] };
         const tE = { x: x * matrix[0][0] + extent * matrix[0][1], y: x * matrix[1][0] + extent * matrix[1][1] };
-        g.append('line').attr('x1', xScale(tS.x)).attr('y1', yScale(tS.y)).attr('x2', xScale(tE.x)).attr('y2', yScale(tE.y)).attr('stroke', '#1e293b').attr('stroke-width', 1).attr('opacity', 0.5);
+        g.append('line').attr('x1', xScale(tS.x)).attr('y1', yScale(tS.y)).attr('x2', xScale(tE.x)).attr('y2', yScale(tE.y)).attr('stroke', gridColor).attr('stroke-width', gridThickness).attr('opacity', 0.7);
       });
       d3.range(-extent, extent + 1).forEach(y => {
         const tS = { x: (-extent) * matrix[0][0] + y * matrix[0][1], y: (-extent) * matrix[1][0] + y * matrix[1][1] };
         const tE = { x: extent * matrix[0][0] + y * matrix[0][1], y: extent * matrix[1][0] + y * matrix[1][1] };
-        g.append('line').attr('x1', xScale(tS.x)).attr('y1', yScale(tS.y)).attr('x2', xScale(tE.x)).attr('y2', yScale(tE.y)).attr('stroke', '#1e293b').attr('stroke-width', 1).attr('opacity', 0.5);
+        g.append('line').attr('x1', xScale(tS.x)).attr('y1', yScale(tS.y)).attr('x2', xScale(tE.x)).attr('y2', yScale(tE.y)).attr('stroke', gridColor).attr('stroke-width', gridThickness).attr('opacity', 0.7);
       });
     }
 
-    g.append('line').attr('x1', xScale(-extent)).attr('y1', yScale(0)).attr('x2', xScale(extent)).attr('y2', yScale(0)).attr('stroke', '#334155').attr('stroke-width', 1);
-    g.append('line').attr('x1', xScale(0)).attr('y1', yScale(-extent)).attr('x2', xScale(0)).attr('y2', yScale(extent)).attr('stroke', '#334155').attr('stroke-width', 1);
+    // Главные оси
+    g.append('line').attr('x1', xScale(-extent)).attr('y1', yScale(0)).attr('x2', xScale(extent)).attr('y2', yScale(0)).attr('stroke', '#475569').attr('stroke-width', 1.5);
+    g.append('line').attr('x1', xScale(0)).attr('y1', yScale(-extent)).attr('x2', xScale(0)).attr('y2', yScale(extent)).attr('stroke', '#475569').attr('stroke-width', 1.5);
 
     defs.append('marker').attr('id', 'arrow').attr('viewBox', '0 -5 10 10').attr('refX', 8).attr('refY', 0).attr('orient', 'auto').attr('markerWidth', 6).attr('markerHeight', 6).append('path').attr('d', 'M0,-5L10,0L0,5').attr('fill', '#fff');
 
@@ -86,7 +117,6 @@ const VectorCanvas: React.FC<VectorCanvasProps> = ({ matrix, vectors, setVectors
         .attr('stroke-width', 3)
         .attr('marker-end', 'url(#arrow)');
 
-      // Invisible larger handle for easier interaction
       vg.append('circle')
         .attr('cx', xScale(tx))
         .attr('cy', yScale(ty))
@@ -103,16 +133,13 @@ const VectorCanvas: React.FC<VectorCanvasProps> = ({ matrix, vectors, setVectors
         .style('pointer-events', 'none');
 
       vg.call(d3.drag<SVGGElement, any>().on('drag', (event) => {
-        // Critical fix: use d3.pointer relative to the SVG root to avoid accumulated offsets from nested <g> elements
         if (!svgRef.current) return;
         const [ptrX, ptrY] = d3.pointer(event, svgRef.current);
-        
         const mx = xScale.invert(ptrX);
         const my = yScale.invert(ptrY);
         
         let rx = mx, ry = my;
         if (inverseMatrix) {
-          // Calculate source vector coordinates using the inverse matrix transformation
           rx = mx * inverseMatrix[0][0] + my * inverseMatrix[0][1];
           ry = mx * inverseMatrix[1][0] + my * inverseMatrix[1][1];
         }
@@ -123,13 +150,14 @@ const VectorCanvas: React.FC<VectorCanvasProps> = ({ matrix, vectors, setVectors
       }) as any);
     });
 
-  }, [matrix, vectors, showGrid, inverseMatrix, setVectors]);
+  }, [matrix, vectors, showGrid, showOriginalGrid, gridColor, originalGridColor, gridThickness, originalGridThickness, inverseMatrix, setVectors]);
 
   return (
     <div className="w-full h-full bg-slate-900/30 rounded-xl border border-slate-800 overflow-hidden relative shadow-inner">
       <svg ref={svgRef} className="w-full h-full" />
-      <div className="absolute bottom-4 left-4 pointer-events-none">
-        <span className="text-[10px] text-slate-500 font-mono uppercase tracking-tighter bg-slate-950/50 px-2 py-1 rounded">Interactive 2D Space</span>
+      <div className="absolute bottom-4 left-4 pointer-events-none flex flex-col gap-1">
+        <span className="text-[10px] text-slate-500 font-mono uppercase tracking-tighter bg-slate-950/50 px-2 py-1 rounded w-fit">Interactive 2D Space</span>
+        {showOriginalGrid && <span className="text-[8px] text-slate-600 font-black uppercase tracking-widest px-2">Basis grid active</span>}
       </div>
     </div>
   );
