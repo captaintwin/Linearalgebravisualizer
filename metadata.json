@@ -1,0 +1,5 @@
+{
+  "name": "Linear Algebra Explorer",
+  "description": "An interactive mathematical playground for visualizing linear algebra concepts like vector operations, matrix transformations, and basis changes.",
+  "requestFramePermissions": []
+}
