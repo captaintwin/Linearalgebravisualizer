@@ -104,42 +104,43 @@ const ControlPanel: React.FC<ControlPanelProps> = (props) => {
               <div className="flex justify-between items-center">
                 <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Active Matrix (A)</h3>
                 <div className="flex gap-2">
-                  <button onClick={props.onTranspose} className="text-[9px] bg-slate-800 p-1.5 rounded hover:bg-slate-700 text-slate-400 font-bold">Transpose</button>
-                  <button onClick={props.onResetMatrix} className="text-[9px] bg-slate-800 p-1.5 rounded hover:bg-slate-700 text-slate-400 font-bold">Reset</button>
+                  <button onClick={props.onTranspose} className="text-[9px] bg-slate-800 p-1.5 rounded hover:bg-slate-700 text-slate-400 font-bold transition-colors">T</button>
+                  <button onClick={props.onResetMatrix} className="text-[9px] bg-slate-800 p-1.5 rounded hover:bg-slate-700 text-slate-400 font-bold transition-colors">↺</button>
                 </div>
               </div>
               
               <div className="relative group p-1">
-                <div className="absolute -left-1 top-0 bottom-0 w-2 border-l-2 border-t-2 border-b-2 border-indigo-500/30 rounded-l"></div>
-                <div className="absolute -right-1 top-0 bottom-0 w-2 border-r-2 border-t-2 border-b-2 border-indigo-500/30 rounded-r"></div>
+                <div className="absolute -left-1 top-0 bottom-0 w-2 border-l-2 border-t-2 border-b-2 border-indigo-500/40 rounded-l"></div>
+                <div className="absolute -right-1 top-0 bottom-0 w-2 border-r-2 border-t-2 border-b-2 border-indigo-500/40 rounded-r"></div>
                 
-                <div className={`grid ${props.mode === '2D' ? 'grid-cols-2' : 'grid-cols-3'} gap-2 bg-slate-950/40 p-2 rounded`}>
+                <div className={`grid ${props.mode === '2D' ? 'grid-cols-2' : 'grid-cols-3'} gap-2 bg-slate-950/40 p-3 rounded-md`}>
                   {(props.mode === '2D' ? [0, 1] : [0, 1, 2]).map(r => 
                     (props.mode === '2D' ? [0, 1] : [0, 1, 2]).map(c => (
                       <input key={`${r}-${c}`} type="number" step="0.1" value={props.mode === '2D' ? props.matrix2D[r][c] : props.matrix3D[r][c]}
                         onChange={(e) => handleMatrixChange(r, c, e.target.value)}
-                        className="bg-slate-900 border border-slate-800 rounded py-1.5 text-center text-indigo-400 font-mono text-sm focus:ring-1 focus:ring-indigo-500 outline-none transition-all"
+                        className="bg-slate-900 border border-slate-800 rounded py-2 text-center text-indigo-400 font-mono text-sm focus:ring-1 focus:ring-indigo-500 focus:bg-indigo-950/30 outline-none transition-all"
                       />
                     ))
                   )}
                 </div>
               </div>
 
-              {/* SECTION FOR FORMULAS UNDER THE MATRIX */}
-              <div className="bg-indigo-500/5 border border-indigo-500/20 rounded-xl p-4 space-y-3 shadow-inner">
-                <div className="text-[9px] text-indigo-400 font-black uppercase tracking-widest border-b border-indigo-500/10 pb-2">
-                  Calculation Breakdown: Vector {calculationDetails.vectorLabel}
+              {/* SECTION: STEP-BY-STEP FORMULAS (Placed exactly under the matrix) */}
+              <div className="bg-indigo-600/10 border border-indigo-500/20 rounded-xl p-5 space-y-4 shadow-xl">
+                <div className="flex items-center justify-between border-b border-indigo-500/10 pb-3">
+                  <span className="text-[9px] text-indigo-400 font-black uppercase tracking-widest">Current Operation: $A \vec{v}$</span>
+                  <span className="text-[8px] bg-indigo-500/20 text-indigo-300 px-2 py-0.5 rounded uppercase font-bold">Vector {calculationDetails.vectorLabel}</span>
                 </div>
                 
-                <div className="flex justify-center py-2 overflow-x-auto scrollbar-hide">
-                  <MathFormula formula={calculationDetails.main} className="text-white text-sm" />
+                <div className="flex justify-center py-4 overflow-x-auto scrollbar-hide bg-slate-950/30 rounded-lg">
+                  <MathFormula formula={calculationDetails.main} className="text-white text-base scale-110 origin-center" />
                 </div>
 
-                <div className="space-y-1.5">
+                <div className="grid grid-cols-1 gap-2">
                   {calculationDetails.steps.map((step, idx) => (
-                    <div key={idx} className="bg-slate-950/40 px-3 py-2 rounded border border-white/5 flex items-center justify-between">
-                      <span className="text-[8px] text-slate-500 font-bold uppercase tracking-tighter">Coord {idx === 0 ? 'X' : idx === 1 ? 'Y' : 'Z'}</span>
-                      <MathFormula formula={step} className="text-[11px] text-slate-300 font-mono" />
+                    <div key={idx} className="bg-slate-950/60 px-4 py-3 rounded-lg border border-white/5 flex items-center justify-between hover:border-indigo-500/30 transition-all">
+                      <span className="text-[9px] text-slate-500 font-black uppercase">{idx === 0 ? 'X\'' : idx === 1 ? 'Y\'' : 'Z\''} component</span>
+                      <MathFormula formula={step} className="text-[12px] text-indigo-300 font-mono" />
                     </div>
                   ))}
                 </div>
@@ -153,26 +154,26 @@ const ControlPanel: React.FC<ControlPanelProps> = (props) => {
                   <div key={v.label} className="bg-slate-900/40 p-3 rounded-lg border border-slate-800 group/vec">
                     <div className="flex justify-between items-center mb-2">
                       <div className="flex items-center gap-2">
-                         <div className="w-2 h-2 rounded-full" style={{backgroundColor: v.color}} />
+                         <div className="w-2.5 h-2.5 rounded-full shadow-[0_0_8px_rgba(0,0,0,0.5)]" style={{backgroundColor: v.color}} />
                          <span className="text-[10px] font-black uppercase tracking-wider text-slate-300">Vector {v.label}</span>
                       </div>
                       <button 
                         onClick={() => props.onResetVector(i)}
-                        className="text-[8px] opacity-0 group-hover/vec:opacity-100 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white px-1.5 py-0.5 rounded border border-slate-700 transition-all uppercase font-bold"
+                        className="text-[8px] opacity-0 group-hover/vec:opacity-100 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white px-2 py-0.5 rounded transition-all uppercase font-bold"
                       >
                         Reset
                       </button>
                     </div>
-                    <div className={`grid ${props.mode === '2D' ? 'grid-cols-2' : 'grid-cols-3'} gap-2`}>
+                    <div className={`grid ${props.mode === '2D' ? 'grid-cols-2' : 'grid-cols-3'} gap-3`}>
                       {['x', 'y', ...(props.mode === '3D' ? ['z'] : [])].map(axis => (
-                        <div key={axis} className="flex items-center gap-1.5">
-                          <span className="text-[9px] text-slate-600 font-bold uppercase">{axis}</span>
+                        <div key={axis} className="flex flex-col gap-1">
+                          <span className="text-[8px] text-slate-600 font-bold uppercase ml-1">{axis}</span>
                           <input
                             type="number"
                             step="0.1"
                             value={(v as any)[axis]}
                             onChange={(e) => handleVectorChange(i, axis, e.target.value)}
-                            className="w-full bg-slate-950 border border-slate-800 rounded px-1.5 py-1 text-[11px] focus:outline-none focus:border-indigo-500/50 font-mono text-slate-300 transition-colors"
+                            className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1.5 text-[11px] focus:outline-none focus:border-indigo-500/50 font-mono text-slate-300 transition-colors"
                           />
                         </div>
                       ))}
@@ -183,11 +184,11 @@ const ControlPanel: React.FC<ControlPanelProps> = (props) => {
             </section>
 
             <section>
-              <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-4">Presets & Bases</h3>
+              <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-4">Presets & Transformations</h3>
               <div className="flex flex-wrap gap-2">
                 {Object.keys(props.mode === '2D' ? PRESET_TRANSFORMATIONS_2D : PRESET_TRANSFORMATIONS_3D).map(n => (
                   <button key={n} onClick={() => props.mode === '2D' ? props.setMatrix2D(PRESET_TRANSFORMATIONS_2D[n]) : props.setMatrix3D(PRESET_TRANSFORMATIONS_3D[n])}
-                    className="text-[9px] bg-slate-800/50 hover:bg-indigo-900/30 text-slate-400 hover:text-indigo-300 px-2 py-1.5 rounded border border-slate-800 transition-all font-bold">
+                    className="text-[9px] bg-slate-800/50 hover:bg-indigo-900/40 text-slate-400 hover:text-indigo-200 px-3 py-2 rounded border border-slate-800 transition-all font-bold">
                     {n}
                   </button>
                 ))}
@@ -200,7 +201,7 @@ const ControlPanel: React.FC<ControlPanelProps> = (props) => {
           <div className="space-y-6">
             {props.mode === '2D' && (
               <section className="animate-in fade-in duration-300">
-                <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-4">Matrix B (Multiplicand)</h3>
+                <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-4">Matrix B (Chain Operation)</h3>
                 <div className="relative mb-4">
                   <div className="absolute -left-2 top-0 bottom-0 w-2 border-l-2 border-t-2 border-b-2 border-slate-700 rounded-l"></div>
                   <div className="absolute -right-2 top-0 bottom-0 w-2 border-r-2 border-t-2 border-b-2 border-slate-700 rounded-r"></div>
@@ -213,8 +214,8 @@ const ControlPanel: React.FC<ControlPanelProps> = (props) => {
                     )))}
                   </div>
                 </div>
-                <button onClick={props.onMultiply} className="w-full py-3 bg-emerald-600/20 hover:bg-emerald-600/40 text-emerald-400 text-[10px] font-black uppercase rounded-lg border border-emerald-500/30 transition-all">
-                  Execute: <MathFormula formula="A = A \times B" />
+                <button onClick={props.onMultiply} className="w-full py-4 bg-emerald-600/10 hover:bg-emerald-600/20 text-emerald-400 text-[10px] font-black uppercase rounded-lg border border-emerald-500/30 transition-all">
+                   Multiply matrices: <MathFormula formula="A_{new} = A \times B" className="ml-2" />
                 </button>
               </section>
             )}
@@ -225,9 +226,12 @@ const ControlPanel: React.FC<ControlPanelProps> = (props) => {
           <div className="space-y-6">
             <button
               onClick={props.onShare}
-              className="w-full py-3 bg-slate-800 hover:bg-slate-700 text-slate-200 text-[10px] font-black uppercase tracking-widest rounded-lg border border-slate-700 transition-all flex items-center justify-center gap-2"
+              className="w-full py-4 bg-slate-800 hover:bg-slate-700 text-slate-200 text-[10px] font-black uppercase tracking-widest rounded-lg border border-slate-700 transition-all flex items-center justify-center gap-2 shadow-lg"
             >
-              Share Current Scene
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+              </svg>
+              Share Configuration
             </button>
             <div className="flex items-center justify-between pt-6 border-t border-slate-800">
               <label className="flex items-center gap-3 cursor-pointer group">
@@ -235,12 +239,12 @@ const ControlPanel: React.FC<ControlPanelProps> = (props) => {
                   type="checkbox"
                   checked={props.showGrid}
                   onChange={(e) => props.setShowGrid(e.target.checked)}
-                  className="w-4 h-4 rounded bg-slate-900 border-slate-700 text-indigo-600 focus:ring-indigo-500 transition-all"
+                  className="w-5 h-5 rounded bg-slate-950 border-slate-700 text-indigo-600 focus:ring-indigo-500 transition-all cursor-pointer"
                 />
-                <span className="text-[11px] text-slate-500 font-black uppercase tracking-wider">Show Grid</span>
+                <span className="text-[11px] text-slate-500 font-black uppercase tracking-wider group-hover:text-slate-300">Display Transformation Grid</span>
               </label>
-              <button onClick={props.onResetAll} className="text-rose-500 hover:text-rose-400 text-[10px] font-black uppercase tracking-widest transition-colors">
-                Full Reset
+              <button onClick={props.onResetAll} className="text-rose-500 hover:text-rose-400 text-[10px] font-black uppercase tracking-widest transition-colors p-2">
+                Factory Reset
               </button>
             </div>
           </div>
