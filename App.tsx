@@ -60,12 +60,13 @@ const App: React.FC = () => {
       const [[a, b], [c, d]] = matrix2D;
       const det = a * d - b * c;
       const trace = a + d;
-      return { det, trace };
+      const disc = Math.pow(trace, 2) - 4 * det;
+      return { det, trace, disc };
     } else {
       const m = matrix3D.flat();
       const det = m[0]*(m[4]*m[8]-m[5]*m[7]) - m[1]*(m[3]*m[8]-m[5]*m[6]) + m[2]*(m[3]*m[7]-m[4]*m[6]);
       const trace = matrix3D[0][0] + matrix3D[1][1] + matrix3D[2][2];
-      return { det, trace };
+      return { det, trace, disc: 0 };
     }
   }, [matrix2D, matrix3D, mode]);
 
@@ -128,6 +129,9 @@ const App: React.FC = () => {
                <div className="bg-slate-900/80 backdrop-blur-md border border-white/5 p-4 rounded-xl shadow-xl space-y-2 min-w-[120px]">
                  <div className="flex justify-between items-center text-[10px] uppercase font-bold text-slate-500"><span>det(A)</span><span className="text-indigo-400 font-mono">{matrixStats.det.toFixed(2)}</span></div>
                  <div className="flex justify-between items-center text-[10px] uppercase font-bold text-slate-500"><span>tr(A)</span><span className="text-emerald-400 font-mono">{matrixStats.trace.toFixed(2)}</span></div>
+                 {mode === '2D' && (
+                    <div className="flex justify-between items-center text-[10px] uppercase font-bold text-slate-500"><span>disc(A)</span><span className="text-rose-400 font-mono">{matrixStats.disc.toFixed(2)}</span></div>
+                 )}
                </div>
             </div>
 
