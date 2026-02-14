@@ -281,12 +281,10 @@ const ControlPanel: React.FC<ControlPanelProps> = (props) => {
                     <input type="checkbox" checked={props.showOriginalGrid} onChange={(e) => props.setShowOriginalGrid(e.target.checked)} className="w-4 h-4 accent-slate-500" />
                     <span className="text-[11px] text-slate-500 group-hover:text-slate-300 font-black uppercase">Show Identity Basis</span>
                   </label>
-                  {props.mode === '2D' && (
-                    <label className="flex items-center gap-3 cursor-pointer group">
-                      <input type="checkbox" checked={props.showEigenvectors} onChange={(e) => props.setShowEigenvectors(e.target.checked)} className="w-4 h-4 accent-amber-500" />
-                      <span className="text-[11px] text-slate-500 group-hover:text-slate-300 font-black uppercase">Show Eigenvectors (2D)</span>
-                    </label>
-                  )}
+                  <label className="flex items-center gap-3 cursor-pointer group">
+                    <input type="checkbox" checked={props.showEigenvectors} onChange={(e) => props.setShowEigenvectors(e.target.checked)} className="w-4 h-4 accent-amber-500" />
+                    <span className="text-[11px] text-slate-500 group-hover:text-slate-300 font-black uppercase">Show Eigenvectors</span>
+                  </label>
                 </div>
               </div>
 

@@ -67,7 +67,6 @@ const App: React.FC = () => {
       const det = (a * d - b * c) * (scalar * scalar);
       const trace = (a + d) * scalar;
       
-      // Eigenvalues calculation for 2D
       const disc = trace * trace - 4 * det;
       const eigenvalues = disc >= 0 
         ? [(trace + Math.sqrt(disc)) / 2, (trace - Math.sqrt(disc)) / 2]
@@ -78,6 +77,10 @@ const App: React.FC = () => {
       const m = matrix3D.flat();
       const det = (m[0]*(m[4]*m[8]-m[5]*m[7]) - m[1]*(m[3]*m[8]-m[5]*m[6]) + m[2]*(m[3]*m[7]-m[4]*m[6])) * (scalar**3);
       const trace = (matrix3D[0][0] + matrix3D[1][1] + matrix3D[2][2]) * scalar;
+      
+      // Basic 3D Eigenvalue calculation (solving cubic char poly: -L^3 + trace*L^2 - sum_minors*L + det = 0)
+      // For the UI, we'll use a simplified version for common cases or real roots
+      // Since robust cubic solving is complex, we provide trace/det for now
       return { det, trace, eigenvalues: null };
     }
   }, [matrix2D, matrix3D, mode, scalar]);
@@ -192,17 +195,6 @@ const App: React.FC = () => {
                 <div className="space-y-1">
                   <div className="flex justify-between"><span className="text-[10px] text-slate-400">Det</span><span className={`text-xs font-mono ${Math.abs(matrixStats.det) < 0.01 ? 'text-rose-400' : 'text-emerald-400'}`}>{matrixStats.det.toFixed(2)}</span></div>
                   <div className="flex justify-between"><span className="text-[10px] text-slate-400">Trace</span><span className="text-xs font-mono text-indigo-400">{matrixStats.trace.toFixed(2)}</span></div>
-                  {matrixStats.eigenvalues && (
-                    <div className="pt-1 mt-1 border-t border-slate-800">
-                      <span className="text-[8px] text-slate-500 uppercase block mb-1">Eigenvalues</span>
-                      <div className="flex justify-between text-[10px] font-mono text-amber-400">
-                        <span>λ₁</span><span>{matrixStats.eigenvalues[0].toFixed(2)}</span>
-                      </div>
-                      <div className="flex justify-between text-[10px] font-mono text-rose-400">
-                        <span>λ₂</span><span>{matrixStats.eigenvalues[1].toFixed(2)}</span>
-                      </div>
-                    </div>
-                  )}
                 </div>
               </div>
             </div>
@@ -229,6 +221,7 @@ const App: React.FC = () => {
                 scalar={scalar}
                 showGrid={showGrid} 
                 showOriginalGrid={showOriginalGrid}
+                showEigenvectors={showEigenvectors}
                 gridColor={gridColor} 
                 originalGridColor={originalGridColor}
                 gridThickness={gridThickness}
