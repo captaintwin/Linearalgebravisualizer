@@ -1,6 +1,8 @@
 
 // App.tsx
 import React, { useState, useMemo, useEffect } from 'react';
+// Added THREE import to fix "Cannot find name 'THREE'" errors in eigenvalue calculations.
+import * as THREE from 'three';
 import VectorCanvas from './components/VectorCanvas';
 import VectorCanvas3D from './components/VectorCanvas3D';
 import ControlPanel from './components/ControlPanel';
@@ -24,7 +26,8 @@ const App: React.FC = () => {
   
   const [showGrid, setShowGrid] = useState<boolean>(true);
   const [showOriginalGrid, setShowOriginalGrid] = useState<boolean>(true);
-  const [showEigenvectors, setShowEigenvectors] = useState<boolean>(false);
+  // Default showEigenvectors to true as requested
+  const [showEigenvectors, setShowEigenvectors] = useState<boolean>(true);
   
   const [gridColor, setGridColor] = useState<string>('#6366f1');
   const [originalGridColor, setOriginalGridColor] = useState<string>('#ffffff');
@@ -63,25 +66,75 @@ const App: React.FC = () => {
 
   const matrixStats = useMemo(() => {
     if (mode === '2D') {
-      const [[a, b], [c, d]] = matrix2D;
-      const det = (a * d - b * c) * (scalar * scalar);
-      const trace = (a + d) * scalar;
+      const [[a, b], [c, d]] = matrix2D.map(row => row.map(v => v * scalar)) as Matrix2x2;
+      const det = a * d - b * c;
+      const trace = a + d;
       
       const disc = trace * trace - 4 * det;
-      const eigenvalues = disc >= 0 
-        ? [(trace + Math.sqrt(disc)) / 2, (trace - Math.sqrt(disc)) / 2]
-        : null;
-
-      return { det, trace, eigenvalues };
-    } else {
-      const m = matrix3D.flat();
-      const det = (m[0]*(m[4]*m[8]-m[5]*m[7]) - m[1]*(m[3]*m[8]-m[5]*m[6]) + m[2]*(m[3]*m[7]-m[4]*m[6])) * (scalar**3);
-      const trace = (matrix3D[0][0] + matrix3D[1][1] + matrix3D[2][2]) * scalar;
+      const charEq = `\\lambda^2 - ${trace.toFixed(2)}\\lambda + ${det.toFixed(2)} = 0`;
       
-      // Basic 3D Eigenvalue calculation (solving cubic char poly: -L^3 + trace*L^2 - sum_minors*L + det = 0)
-      // For the UI, we'll use a simplified version for common cases or real roots
-      // Since robust cubic solving is complex, we provide trace/det for now
-      return { det, trace, eigenvalues: null };
+      let eigenvalues = null;
+      if (disc >= 0) {
+        const l1 = (trace + Math.sqrt(disc)) / 2;
+        const l2 = (trace - Math.sqrt(disc)) / 2;
+        
+        const findV = (l: number) => {
+          if (Math.abs(b) > 1e-4) return { x: l - d, y: b };
+          if (Math.abs(c) > 1e-4) return { x: c, y: l - a };
+          return l === a ? { x: 1, y: 0 } : { x: 0, y: 1 };
+        };
+        
+        eigenvalues = [
+          { val: l1, vec: findV(l1), color: '#fbbf24' },
+          { val: l2, vec: findV(l2), color: '#fb7185' }
+        ];
+      }
+
+      return { det, trace, eigenvalues, charEq };
+    } else {
+      const m = matrix3D.flat().map(v => v * scalar);
+      const [a11, a12, a13, a21, a22, a23, a31, a32, a33] = m;
+      
+      const det = a11*(a22*a33 - a23*a32) - a12*(a21*a33 - a23*a31) + a13*(a21*a32 - a22*a31);
+      const trace = a11 + a22 + a33;
+      const sumMinors = (a11*a22 - a12*a21) + (a11*a33 - a13*a31) + (a22*a33 - a23*a32);
+      
+      const charEq = `-\\lambda^3 + ${trace.toFixed(2)}\\lambda^2 - ${sumMinors.toFixed(2)}\\lambda + ${det.toFixed(2)} = 0`;
+
+      // Simple root finder for common 3D cases (real roots only)
+      const findRoots = () => {
+        const roots: number[] = [];
+        const f = (l: number) => -Math.pow(l, 3) + trace*Math.pow(l, 2) - sumMinors*l + det;
+        for (let i = -20; i <= 20; i += 0.5) {
+          if (f(i) * f(i+0.5) <= 0) {
+            let low = i, high = i+0.5;
+            for(let j=0; j<10; j++) {
+              let mid = (low+high)/2;
+              if (f(low)*f(mid) <= 0) high = mid; else low = mid;
+            }
+            const r = (low+high)/2;
+            if (roots.length === 0 || Math.abs(roots[roots.length-1] - r) > 0.1) roots.push(r);
+          }
+        }
+        return roots;
+      };
+
+      const roots = findRoots();
+      const colors = ['#fbbf24', '#fb7185', '#2dd4bf'];
+      const eigenvalues = roots.map((r, i) => {
+        // Fix for "Cannot find name 'THREE'" by using the imported THREE namespace.
+        const v1 = new THREE.Vector3(a11 - r, a12, a13);
+        const v2 = new THREE.Vector3(a21, a22 - r, a23);
+        const v3 = new THREE.Vector3(a31, a32, a33 - r);
+        let vec = new THREE.Vector3().crossVectors(v1, v2);
+        if (vec.length() < 1e-3) vec = new THREE.Vector3().crossVectors(v1, v3);
+        if (vec.length() < 1e-3) vec = new THREE.Vector3().crossVectors(v2, v3);
+        if (vec.length() < 1e-3) vec = new THREE.Vector3(1,0,0);
+        vec.normalize();
+        return { val: r, vec: { x: vec.x, y: vec.y, z: vec.z }, color: colors[i % 3] };
+      });
+
+      return { det, trace, eigenvalues, charEq };
     }
   }, [matrix2D, matrix3D, mode, scalar]);
 
@@ -168,7 +221,8 @@ const App: React.FC = () => {
               setSelectedVectorIdx(0);
               setScalar(1.0);
               setShowOriginalGrid(true);
-              setShowEigenvectors(false);
+              // Reset showEigenvectors back to true
+              setShowEigenvectors(true);
               setGridColor('#6366f1');
               setOriginalGridColor('#ffffff');
               window.location.hash = ''; 
@@ -189,12 +243,59 @@ const App: React.FC = () => {
                <MathFormula formula={transformationMainFormula} className="text-sm md:text-base text-white font-mono whitespace-nowrap" />
             </div>
 
-            <div className="absolute top-4 right-4 z-30 flex flex-col gap-2 pointer-events-none">
-              <div className="bg-slate-900/80 backdrop-blur-md border border-slate-700 p-3 rounded-lg shadow-2xl min-w-[140px]">
-                <div className="flex justify-between items-center mb-2"><span className="text-[10px] text-slate-500 font-bold uppercase">Properties</span></div>
-                <div className="space-y-1">
-                  <div className="flex justify-between"><span className="text-[10px] text-slate-400">Det</span><span className={`text-xs font-mono ${Math.abs(matrixStats.det) < 0.01 ? 'text-rose-400' : 'text-emerald-400'}`}>{matrixStats.det.toFixed(2)}</span></div>
-                  <div className="flex justify-between"><span className="text-[10px] text-slate-400">Trace</span><span className="text-xs font-mono text-indigo-400">{matrixStats.trace.toFixed(2)}</span></div>
+            <div className="absolute top-4 right-4 z-30 flex flex-col gap-3 pointer-events-none">
+              <div className="bg-slate-900/90 backdrop-blur-md border border-slate-700 p-4 rounded-xl shadow-2xl min-w-[200px] pointer-events-auto">
+                <div className="flex justify-between items-center mb-3">
+                  <span className="text-[10px] text-slate-500 font-black uppercase tracking-widest">Properties & Eigens</span>
+                  <div className="w-2 h-2 rounded-full bg-emerald-500" />
+                </div>
+                
+                <div className="space-y-4">
+                  {/* Scalar Stats */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                      <span className="text-[9px] text-slate-500 font-bold uppercase">Det(A)</span>
+                      <div className={`text-sm font-mono font-bold ${Math.abs(matrixStats.det) < 0.01 ? 'text-rose-400' : 'text-indigo-400'}`}>
+                        {matrixStats.det.toFixed(2)}
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <span className="text-[9px] text-slate-500 font-bold uppercase">Trace(A)</span>
+                      <div className="text-sm font-mono font-bold text-indigo-300">
+                        {matrixStats.trace.toFixed(2)}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Characteristic Equation */}
+                  <div className="pt-2 border-t border-slate-800">
+                    <span className="text-[9px] text-slate-500 font-black uppercase tracking-widest block mb-2">Char Equation $P(\lambda)$</span>
+                    <div className="bg-slate-950/50 p-2 rounded border border-slate-800 overflow-x-auto">
+                      <MathFormula formula={matrixStats.charEq} className="text-xs text-white" />
+                    </div>
+                  </div>
+
+                  {/* Eigenvalues & Eigenvectors */}
+                  {matrixStats.eigenvalues && matrixStats.eigenvalues.length > 0 ? (
+                    <div className="pt-2 border-t border-slate-800 space-y-3">
+                      <span className="text-[9px] text-slate-500 font-black uppercase tracking-widest block">Eigen Spaces</span>
+                      {matrixStats.eigenvalues.map((ev, i) => (
+                        <div key={i} className="flex flex-col gap-1.5 p-2 rounded bg-slate-800/40 border-l-2" style={{ borderColor: ev.color }}>
+                          <div className="flex justify-between items-center">
+                            <span className="text-[10px] font-mono font-bold" style={{ color: ev.color }}>λ{i+1} = {ev.val.toFixed(2)}</span>
+                          </div>
+                          <div className="text-[10px] font-mono text-slate-400 flex items-center gap-1">
+                            <span className="text-[8px] uppercase font-black text-slate-600">Vec:</span>
+                            ({ev.vec.x.toFixed(2)}, {ev.vec.y.toFixed(2)}{ev.vec.z !== undefined ? `, ${ev.vec.z.toFixed(2)}` : ''})
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="pt-2 border-t border-slate-800 text-[9px] text-slate-500 italic">
+                      No real eigenvalues for this transformation
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
