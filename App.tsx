@@ -1,17 +1,14 @@
-
 // App.tsx
 import React, { useState, useMemo, useEffect } from 'react';
 import VectorCanvas from './components/VectorCanvas';
 import VectorCanvas3D from './components/VectorCanvas3D';
 import ControlPanel from './components/ControlPanel';
 import MathFormula from './components/MathFormula';
-import GeminiInsights from './components/GeminiInsights';
-import { getMatrixInsights } from './services/geminiService';
 import { 
   INITIAL_MATRIX_2D, INITIAL_VECTORS_2D, 
   INITIAL_MATRIX_3D, INITIAL_VECTORS_3D 
 } from './constants';
-import { Matrix2x2, Matrix3x3, Vector2D, Vector3D, DimensionMode, GeminiInsight } from './types';
+import { Matrix2x2, Matrix3x3, Vector2D, Vector3D, DimensionMode } from './types';
 
 const App: React.FC = () => {
   const [mode, setMode] = useState<DimensionMode>('2D');
@@ -35,9 +32,6 @@ const App: React.FC = () => {
   
   const [gridThickness, setGridThickness] = useState<number>(2.0); // Doubled default
   const [originalGridThickness, setOriginalGridThickness] = useState<number>(1.0); // Doubled default (from 0.5)
-  
-  const [insight, setInsight] = useState<GeminiInsight | null>(null);
-  const [loadingInsights, setLoadingInsights] = useState(false);
 
   useEffect(() => {
     try {
@@ -73,20 +67,6 @@ const App: React.FC = () => {
     navigator.clipboard.writeText(window.location.href).then(() => {
       alert("Link copied to clipboard!");
     });
-  };
-
-  const handleAnalyze = async () => {
-    setLoadingInsights(true);
-    const matrix = mode === '2D' ? matrix2D : matrix3D;
-    const vectors = mode === '2D' ? vectors2D : vectors3D;
-    try {
-      const result = await getMatrixInsights(matrix, vectors);
-      setInsight(result);
-    } catch (err) {
-      console.error("Analysis failed:", err);
-    } finally {
-      setLoadingInsights(false);
-    }
   };
 
   const matrixStats = useMemo(() => {
@@ -187,7 +167,6 @@ const App: React.FC = () => {
               setVectors3D([...INITIAL_VECTORS_3D]);
               setSelectedVectorIdx(0);
               setScalar(1.0);
-              setInsight(null); 
               setShowOriginalGrid(true);
               setGridColor('#6366f1');
               setOriginalGridColor('#ffffff');
@@ -248,30 +227,6 @@ const App: React.FC = () => {
                 gridThickness={gridThickness}
                 originalGridThickness={originalGridThickness}
               />
-            )}
-          </div>
-
-          <div className="shrink-0 space-y-4">
-            {!insight && !loadingInsights ? (
-              <button 
-                onClick={handleAnalyze}
-                className="w-full py-4 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-black uppercase tracking-widest shadow-lg transition-all flex items-center justify-center gap-3 active:scale-95"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                </svg>
-                AI Analysis with Gemini
-              </button>
-            ) : (
-              <GeminiInsights insight={insight} loading={loadingInsights} />
-            )}
-            {insight && !loadingInsights && (
-               <button 
-                 onClick={() => setInsight(null)}
-                 className="text-[10px] text-slate-500 hover:text-slate-300 font-bold uppercase tracking-widest w-full text-center py-2 transition-colors"
-               >
-                 Clear Analysis
-               </button>
             )}
           </div>
         </div>
