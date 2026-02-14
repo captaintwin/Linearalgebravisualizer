@@ -54,21 +54,18 @@ const VectorCanvas: React.FC<VectorCanvasProps> = ({
           .attr('x2', xScale(i)).attr('y2', yScale(extent))
           .attr('stroke', originalGridColor)
           .attr('stroke-width', originalGridThickness)
-          .attr('stroke-dasharray', '2,2')
-          .attr('opacity', 0.6);
+          .attr('opacity', 0.4);
         // Горизонтальные линии
         originalGridG.append('line')
           .attr('x1', xScale(-extent)).attr('y1', yScale(i))
           .attr('x2', xScale(extent)).attr('y2', yScale(i))
           .attr('stroke', originalGridColor)
           .attr('stroke-width', originalGridThickness)
-          .attr('stroke-dasharray', '2,2')
-          .attr('opacity', 0.6);
+          .attr('opacity', 0.4);
       });
     }
 
     // 2. Визуализация определителя (площадь трансформации)
-    // We scale the unit area basis vectors by the scalar as well
     const i_t = { x: 1 * matrix[0][0] * scalar, y: 1 * matrix[1][0] * scalar };
     const j_t = { x: 1 * matrix[0][1] * scalar, y: 1 * matrix[1][1] * scalar };
     const k_t = { x: i_t.x + j_t.x, y: i_t.y + j_t.y };
@@ -152,7 +149,6 @@ const VectorCanvas: React.FC<VectorCanvasProps> = ({
         const mx = xScale.invert(ptrX);
         const my = yScale.invert(ptrY);
         
-        // When dragging, we invert both the matrix AND the scalar
         let rx = mx, ry = my;
         const effectiveScalar = Math.abs(scalar) < 1e-6 ? 1e-6 : scalar;
         if (inverseMatrix) {
@@ -176,7 +172,7 @@ const VectorCanvas: React.FC<VectorCanvasProps> = ({
       <svg ref={svgRef} className="w-full h-full" />
       <div className="absolute bottom-4 left-4 pointer-events-none flex flex-col gap-1">
         <span className="text-[10px] text-slate-500 font-mono uppercase tracking-tighter bg-slate-950/50 px-2 py-1 rounded w-fit">Interactive 2D Space</span>
-        {showOriginalGrid && <span className="text-[8px] text-slate-600 font-black uppercase tracking-widest px-2">Basis grid active</span>}
+        {showOriginalGrid && <span className="text-[8px] text-slate-200 font-black uppercase tracking-widest px-2">Basis grid active</span>}
       </div>
     </div>
   );

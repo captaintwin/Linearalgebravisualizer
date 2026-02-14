@@ -26,11 +26,15 @@ const App: React.FC = () => {
   const [scalar, setScalar] = useState<number>(1.0);
   
   const [showGrid, setShowGrid] = useState<boolean>(true);
-  const [showOriginalGrid, setShowOriginalGrid] = useState<boolean>(false);
-  const [gridColor, setGridColor] = useState<string>('#1e293b');
-  const [originalGridColor, setOriginalGridColor] = useState<string>('#334155');
-  const [gridThickness, setGridThickness] = useState<number>(1.0);
-  const [originalGridThickness, setOriginalGridThickness] = useState<number>(0.5);
+  const [showOriginalGrid, setShowOriginalGrid] = useState<boolean>(true); // Enabled by default
+  
+  // gridColor refers to the TRANSFORMED grid (associated with the matrix)
+  const [gridColor, setGridColor] = useState<string>('#6366f1'); // Indigo (Active/Transformed)
+  // originalGridColor refers to the IDENTITY/BASIS grid
+  const [originalGridColor, setOriginalGridColor] = useState<string>('#ffffff'); // White by default
+  
+  const [gridThickness, setGridThickness] = useState<number>(2.0); // Doubled default
+  const [originalGridThickness, setOriginalGridThickness] = useState<number>(1.0); // Doubled default (from 0.5)
   
   const [insight, setInsight] = useState<GeminiInsight | null>(null);
   const [loadingInsights, setLoadingInsights] = useState(false);
@@ -76,7 +80,6 @@ const App: React.FC = () => {
     const matrix = mode === '2D' ? matrix2D : matrix3D;
     const vectors = mode === '2D' ? vectors2D : vectors3D;
     try {
-      // In a real app we might pass the scalar to Gemini too for full context
       const result = await getMatrixInsights(matrix, vectors);
       setInsight(result);
     } catch (err) {
@@ -146,7 +149,7 @@ const App: React.FC = () => {
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 bg-indigo-600 rounded flex items-center justify-center">
             <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2-2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
             </svg>
           </div>
           <h1 className="text-lg font-black text-white tracking-tight hidden sm:block">Linear Matrix Lab</h1>
@@ -185,11 +188,11 @@ const App: React.FC = () => {
               setSelectedVectorIdx(0);
               setScalar(1.0);
               setInsight(null); 
-              setShowOriginalGrid(false);
-              setGridColor('#1e293b');
-              setOriginalGridColor('#334155');
-              setGridThickness(1.0);
-              setOriginalGridThickness(0.5);
+              setShowOriginalGrid(true);
+              setGridColor('#6366f1');
+              setOriginalGridColor('#ffffff');
+              setGridThickness(2.0);
+              setOriginalGridThickness(1.0);
               window.location.hash = ''; 
             }}
             onTranspose={handleTranspose}
@@ -239,7 +242,11 @@ const App: React.FC = () => {
                 setVectors={setVectors3D} 
                 scalar={scalar}
                 showGrid={showGrid} 
+                showOriginalGrid={showOriginalGrid}
                 gridColor={gridColor} 
+                originalGridColor={originalGridColor}
+                gridThickness={gridThickness}
+                originalGridThickness={originalGridThickness}
               />
             )}
           </div>

@@ -1,12 +1,8 @@
 
 import React, { useEffect, useRef, useMemo } from 'react';
-import * as THREE from 'this-should-be-handled-by-import-map-but-importing-from-three-is-standard';
-import * as THREE_LIB from 'three';
+import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { Vector3D, Matrix3x3 } from '../types';
-
-// Workaround for some environments to ensure THREE is accessed correctly
-const THREE = THREE_LIB;
 
 interface VectorCanvas3DProps {
   matrix: Matrix3x3;
@@ -14,13 +10,20 @@ interface VectorCanvas3DProps {
   setVectors: React.Dispatch<React.SetStateAction<Vector3D[]>>;
   scalar: number;
   showGrid: boolean;
+  showOriginalGrid: boolean;
   gridColor: string;
+  originalGridColor: string;
+  gridThickness: number;
+  originalGridThickness: number;
 }
 
-const VectorCanvas3D: React.FC<VectorCanvas3DProps> = ({ matrix, vectors, setVectors, scalar, showGrid, gridColor }) => {
+const VectorCanvas3D: React.FC<VectorCanvas3DProps> = ({ 
+  matrix, vectors, setVectors, scalar, showGrid, showOriginalGrid, 
+  gridColor, originalGridColor, gridThickness, originalGridThickness 
+}) => {
   const containerRef = useRef<HTMLDivElement>(null);
   
-  // Рефы для стабильного доступа к данным внутри обработчиков событий
+  // Refs for stable data access inside event handlers
   const stateRef = useRef({
     vectors,
     matrix,
@@ -29,7 +32,7 @@ const VectorCanvas3D: React.FC<VectorCanvas3DProps> = ({ matrix, vectors, setVec
     isDragging: false
   });
 
-  // Синхронизируем рефы с пропсами
+  // Synchronize refs with props
   useEffect(() => {
     stateRef.current.vectors = vectors;
     stateRef.current.matrix = matrix;
@@ -43,7 +46,8 @@ const VectorCanvas3D: React.FC<VectorCanvas3DProps> = ({ matrix, vectors, setVec
     orbit: OrbitControls;
     handles: THREE.Mesh[];
     arrows: THREE.ArrowHelper[];
-    grid?: THREE.GridHelper;
+    grid?: THREE.Group;
+    originalGrid?: THREE.Group;
     raycaster: THREE.Raycaster;
     dragPlane: THREE.Plane;
   } | null>(null);
@@ -51,7 +55,7 @@ const VectorCanvas3D: React.FC<VectorCanvas3DProps> = ({ matrix, vectors, setVec
   const inverseMatrix = useMemo(() => {
     const m = matrix.flat();
     const [a, b, c, d, e, f, g, h, i] = m;
-    const det = a*(e*i - f*h) - b*(d*i - f*g) + c*(d*h - e*g);
+    const det = a*(e*i - f*h) - b*(d*i - f*h) + c*(d*h - e*g);
     if (Math.abs(det) < 1e-6) return null;
     const inv = [
       (e*i - f*h)/det, (c*h - b*i)/det, (b*f - c*e)/det,
@@ -61,11 +65,11 @@ const VectorCanvas3D: React.FC<VectorCanvas3DProps> = ({ matrix, vectors, setVec
     return [[inv[0], inv[1], inv[2]], [inv[3], inv[4], inv[5]], [inv[6], inv[7], inv[8]]] as Matrix3x3;
   }, [matrix]);
 
-  // Храним обратную матрицу в рефе для обработчиков
+  // Store inverse matrix in ref for handlers
   const invMatrixRef = useRef<Matrix3x3 | null>(null);
   useEffect(() => { invMatrixRef.current = inverseMatrix; }, [inverseMatrix]);
 
-  // 1. Инициализация сцены — выполняется ТОЛЬКО ОДИН РАЗ при монтировании
+  // 1. Scene Initialization
   useEffect(() => {
     if (!containerRef.current) return;
     const width = containerRef.current.clientWidth;
@@ -216,21 +220,74 @@ const VectorCanvas3D: React.FC<VectorCanvas3DProps> = ({ matrix, vectors, setVec
     };
   }, []); 
 
-  // 2. Синхронизация объектов и сетки
+  // 2. Rendering Grids (Basis and Transformed)
   useEffect(() => {
     const s = sceneObjects.current;
     if (!s) return;
 
-    // Удаляем старые объекты
-    s.handles.forEach(h => s.scene.remove(h));
-    s.arrows.forEach(a => s.scene.remove(a));
     if (s.grid) s.scene.remove(s.grid);
+    if (s.originalGrid) s.scene.remove(s.originalGrid);
+
+    const extent = 6;
+    const step = 2; // Reduced density for clarity
+
+    // Function to create grid lines
+    const createLineGrid = (mat: Matrix3x3 | null, color: string, thickness: number, opacity: number) => {
+      const group = new THREE.Group();
+      // Note: LineBasicMaterial linewidth is ignored in most browsers, but we keep the parameter.
+      const material = new THREE.LineBasicMaterial({ 
+        color: new THREE.Color(color), 
+        linewidth: thickness, 
+        transparent: true, 
+        opacity 
+      });
+
+      const applyXform = (x: number, y: number, z: number) => {
+        if (!mat) return new THREE.Vector3(x, y, z);
+        const scl = scalar;
+        return new THREE.Vector3(
+          (x * mat[0][0] + y * mat[0][1] + z * mat[0][2]) * scl,
+          (x * mat[1][0] + y * mat[1][1] + z * mat[1][2]) * scl,
+          (x * mat[2][0] + y * mat[2][1] + z * mat[2][2]) * scl
+        );
+      };
+
+      // Draw grid on XY, XZ, YZ planes
+      for (let i = -extent; i <= extent; i += step) {
+        // Lines along X
+        const pointsX = [applyXform(-extent, i, 0), applyXform(extent, i, 0)];
+        const pointsX2 = [applyXform(-extent, 0, i), applyXform(extent, 0, i)];
+        
+        // Lines along Y
+        const pointsY = [applyXform(i, -extent, 0), applyXform(i, extent, 0)];
+        const pointsY2 = [applyXform(0, -extent, i), applyXform(0, extent, i)];
+
+        // Lines along Z
+        const pointsZ = [applyXform(i, 0, -extent), applyXform(i, 0, extent)];
+        const pointsZ2 = [applyXform(0, i, -extent), applyXform(0, i, extent)];
+
+        [pointsX, pointsX2, pointsY, pointsY2, pointsZ, pointsZ2].forEach(pts => {
+          const geom = new THREE.BufferGeometry().setFromPoints(pts);
+          group.add(new THREE.Line(geom, material));
+        });
+      }
+      return group;
+    };
+
+    if (showOriginalGrid) {
+      // Basis grid defaults to white and respects thickness (at least as a parameter)
+      s.originalGrid = createLineGrid(null, originalGridColor, originalGridThickness, 0.3);
+      s.scene.add(s.originalGrid);
+    }
 
     if (showGrid) {
-      const threeColor = new THREE.Color(gridColor);
-      s.grid = new THREE.GridHelper(12, 12, threeColor, threeColor.clone().multiplyScalar(0.5));
+      s.grid = createLineGrid(matrix, gridColor, gridThickness, 0.7);
       s.scene.add(s.grid);
     }
+
+    // Recreate vectors
+    s.handles.forEach(h => s.scene.remove(h));
+    s.arrows.forEach(a => s.scene.remove(a));
 
     const newHandles: THREE.Mesh[] = [];
     const newArrows: THREE.ArrowHelper[] = [];
@@ -240,7 +297,7 @@ const VectorCanvas3D: React.FC<VectorCanvas3DProps> = ({ matrix, vectors, setVec
       s.scene.add(arrow);
       newArrows.push(arrow);
 
-      const geom = new THREE.SphereGeometry(0.35, 16, 16);
+      const geom = new THREE.SphereGeometry(0.35, 8, 8); 
       const mat = new THREE.MeshStandardMaterial({ 
         color: v.color, 
         transparent: true, 
@@ -255,9 +312,9 @@ const VectorCanvas3D: React.FC<VectorCanvas3DProps> = ({ matrix, vectors, setVec
 
     s.handles = newHandles;
     s.arrows = newArrows;
-  }, [vectors.length, showGrid, gridColor]);
+  }, [vectors.length, showGrid, showOriginalGrid, gridColor, originalGridColor, gridThickness, originalGridThickness, matrix, scalar]);
 
-  // 3. Плавное обновление позиций векторов при изменении матрицы и скаляра
+  // 3. Update Vector Positions
   useEffect(() => {
     const s = sceneObjects.current;
     if (!s) return;
@@ -286,7 +343,7 @@ const VectorCanvas3D: React.FC<VectorCanvas3DProps> = ({ matrix, vectors, setVec
       <div ref={containerRef} className="w-full h-full" />
       <div className="absolute top-4 left-4 flex flex-col gap-1 pointer-events-none">
         <div className="px-2 py-1 bg-indigo-600/20 rounded text-[10px] text-indigo-400 border border-indigo-500/30 font-black uppercase tracking-widest">
-          3D Precision Pick Engine
+          3D Space Lab
         </div>
       </div>
     </div>

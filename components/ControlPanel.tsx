@@ -279,17 +279,15 @@ const ControlPanel: React.FC<ControlPanelProps> = (props) => {
                 <label className="flex items-center justify-between cursor-pointer group">
                   <div className="flex items-center gap-3">
                     <input type="checkbox" checked={props.showGrid} onChange={(e) => props.setShowGrid(e.target.checked)} className="w-5 h-5 rounded-md bg-slate-950 border-slate-800 accent-indigo-600 focus:ring-0" />
-                    <span className="text-[11px] text-slate-500 group-hover:text-slate-300 font-black uppercase transition-colors">Show Transformed Grid</span>
+                    <span className="text-[11px] text-slate-500 group-hover:text-slate-300 font-black uppercase transition-colors">Show Transformed Space</span>
                   </div>
                 </label>
-                {props.mode === '2D' && (
-                  <label className="flex items-center justify-between cursor-pointer group">
-                    <div className="flex items-center gap-3">
-                      <input type="checkbox" checked={props.showOriginalGrid} onChange={(e) => props.setShowOriginalGrid(e.target.checked)} className="w-5 h-5 rounded-md bg-slate-950 border-slate-800 accent-slate-500 focus:ring-0" />
-                      <span className="text-[11px] text-slate-500 group-hover:text-slate-300 font-black uppercase transition-colors">Show Basis (Original) Grid</span>
-                    </div>
-                  </label>
-                )}
+                <label className="flex items-center justify-between cursor-pointer group">
+                  <div className="flex items-center gap-3">
+                    <input type="checkbox" checked={props.showOriginalGrid} onChange={(e) => props.setShowOriginalGrid(e.target.checked)} className="w-5 h-5 rounded-md bg-slate-950 border-slate-800 accent-slate-500 focus:ring-0" />
+                    <span className="text-[11px] text-slate-500 group-hover:text-slate-300 font-black uppercase transition-colors">Show Identity Basis</span>
+                  </div>
+                </label>
               </div>
 
               <div className="space-y-4">
@@ -298,7 +296,7 @@ const ControlPanel: React.FC<ControlPanelProps> = (props) => {
                    {/* Transformed Grid Styling */}
                    <div className="space-y-2">
                      <div className="flex items-center justify-between">
-                       <span className="text-[11px] text-slate-400 font-bold uppercase">Grid Color & Weight</span>
+                       <span className="text-[11px] text-slate-400 font-bold uppercase">Transformed Grid (Matrix)</span>
                        <input 
                          type="color" 
                          value={props.gridColor} 
@@ -318,28 +316,26 @@ const ControlPanel: React.FC<ControlPanelProps> = (props) => {
                    </div>
 
                    {/* Original Grid Styling */}
-                   {props.mode === '2D' && (
-                     <div className="space-y-2">
-                       <div className="flex items-center justify-between">
-                         <span className="text-[11px] text-slate-400 font-bold uppercase">Basis Color & Weight</span>
-                         <input 
-                           type="color" 
-                           value={props.originalGridColor} 
-                           onChange={(e) => props.setOriginalGridColor(e.target.value)} 
-                           className="w-10 h-6 bg-transparent border-none cursor-pointer"
-                         />
-                       </div>
+                   <div className="space-y-2">
+                     <div className="flex items-center justify-between">
+                       <span className="text-[11px] text-slate-400 font-bold uppercase">Identity Basis Grid</span>
                        <input 
-                         type="range" min="0.1" max="4" step="0.1" 
-                         value={props.originalGridThickness} 
-                         onChange={(e) => props.setOriginalGridThickness(parseFloat(e.target.value))}
-                         className="w-full accent-slate-500 h-1.5"
+                         type="color" 
+                         value={props.originalGridColor} 
+                         onChange={(e) => props.setOriginalGridColor(e.target.value)} 
+                         className="w-10 h-6 bg-transparent border-none cursor-pointer"
                        />
-                       <div className="flex justify-between text-[8px] text-slate-600 font-bold">
-                         <span>Fine</span><span>Thick ({props.originalGridThickness.toFixed(1)}px)</span>
-                       </div>
                      </div>
-                   )}
+                     <input 
+                       type="range" min="0.1" max="4" step="0.1" 
+                       value={props.originalGridThickness} 
+                       onChange={(e) => props.setOriginalGridThickness(parseFloat(e.target.value))}
+                       className="w-full accent-slate-500 h-1.5"
+                     />
+                     <div className="flex justify-between text-[8px] text-slate-600 font-bold">
+                       <span>Fine</span><span>Thick ({props.originalGridThickness.toFixed(1)}px)</span>
+                     </div>
+                   </div>
                 </div>
               </div>
 
