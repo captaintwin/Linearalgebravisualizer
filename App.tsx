@@ -1,3 +1,4 @@
+
 // App.tsx
 import React, { useState, useMemo, useEffect } from 'react';
 import VectorCanvas from './components/VectorCanvas';
@@ -13,7 +14,6 @@ import { Matrix2x2, Matrix3x3, Vector2D, Vector3D, DimensionMode } from './types
 const App: React.FC = () => {
   const [mode, setMode] = useState<DimensionMode>('2D');
   const [matrix2D, setMatrix2D] = useState<Matrix2x2>(INITIAL_MATRIX_2D);
-  const [matrixB2D, setMatrixB2D] = useState<Matrix2x2>(INITIAL_MATRIX_2D);
   const [vectors2D, setVectors2D] = useState<Vector2D[]>(INITIAL_VECTORS_2D);
   
   const [matrix3D, setMatrix3D] = useState<Matrix3x3>(INITIAL_MATRIX_3D);
@@ -23,15 +23,13 @@ const App: React.FC = () => {
   const [scalar, setScalar] = useState<number>(1.0);
   
   const [showGrid, setShowGrid] = useState<boolean>(true);
-  const [showOriginalGrid, setShowOriginalGrid] = useState<boolean>(true); // Enabled by default
+  const [showOriginalGrid, setShowOriginalGrid] = useState<boolean>(true);
+  const [showEigenvectors, setShowEigenvectors] = useState<boolean>(false);
   
-  // gridColor refers to the TRANSFORMED grid (associated with the matrix)
-  const [gridColor, setGridColor] = useState<string>('#6366f1'); // Indigo (Active/Transformed)
-  // originalGridColor refers to the IDENTITY/BASIS grid
-  const [originalGridColor, setOriginalGridColor] = useState<string>('#ffffff'); // White by default
-  
-  const [gridThickness, setGridThickness] = useState<number>(2.0); // Doubled default
-  const [originalGridThickness, setOriginalGridThickness] = useState<number>(1.0); // Doubled default (from 0.5)
+  const [gridColor, setGridColor] = useState<string>('#6366f1');
+  const [originalGridColor, setOriginalGridColor] = useState<string>('#ffffff');
+  const [gridThickness, setGridThickness] = useState<number>(2.0);
+  const [originalGridThickness, setOriginalGridThickness] = useState<number>(1.0);
 
   useEffect(() => {
     try {
@@ -43,13 +41,7 @@ const App: React.FC = () => {
         if (data.vectors2D) setVectors2D(data.vectors2D);
         if (data.matrix3D) setMatrix3D(data.matrix3D);
         if (data.vectors3D) setVectors3D(data.vectors3D);
-        if (data.selectedVectorIdx !== undefined) setSelectedVectorIdx(data.selectedVectorIdx);
-        if (data.scalar !== undefined) setScalar(data.scalar);
-        if (data.showOriginalGrid !== undefined) setShowOriginalGrid(data.showOriginalGrid);
-        if (data.gridColor) setGridColor(data.gridColor);
-        if (data.originalGridColor) setOriginalGridColor(data.originalGridColor);
-        if (data.gridThickness !== undefined) setGridThickness(data.gridThickness);
-        if (data.originalGridThickness !== undefined) setOriginalGridThickness(data.originalGridThickness);
+        if (data.showEigenvectors !== undefined) setShowEigenvectors(data.showEigenvectors);
       }
     } catch (e) {
       console.warn("Failed to restore state from URL", e);
@@ -60,7 +52,7 @@ const App: React.FC = () => {
     const state = { 
       mode, matrix2D, vectors2D, matrix3D, vectors3D, 
       selectedVectorIdx, scalar, showOriginalGrid, gridColor, originalGridColor,
-      gridThickness, originalGridThickness
+      gridThickness, originalGridThickness, showEigenvectors
     };
     const hash = btoa(JSON.stringify(state));
     window.location.hash = hash;
@@ -74,14 +66,19 @@ const App: React.FC = () => {
       const [[a, b], [c, d]] = matrix2D;
       const det = (a * d - b * c) * (scalar * scalar);
       const trace = (a + d) * scalar;
-      const normA = Math.sqrt(a*a + b*b + c*c + d*d) * scalar;
-      return { det, trace, norm: normA };
+      
+      // Eigenvalues calculation for 2D
+      const disc = trace * trace - 4 * det;
+      const eigenvalues = disc >= 0 
+        ? [(trace + Math.sqrt(disc)) / 2, (trace - Math.sqrt(disc)) / 2]
+        : null;
+
+      return { det, trace, eigenvalues };
     } else {
       const m = matrix3D.flat();
-      const det = (m[0]*(m[4]*m[8]-m[5]*m[7]) - m[1]*(m[3]*m[8]-m[5]*m[6]) + m[2]*(m[3]*m[7]-m[4]*m[6])) * (scalar * scalar * scalar);
+      const det = (m[0]*(m[4]*m[8]-m[5]*m[7]) - m[1]*(m[3]*m[8]-m[5]*m[6]) + m[2]*(m[3]*m[7]-m[4]*m[6])) * (scalar**3);
       const trace = (matrix3D[0][0] + matrix3D[1][1] + matrix3D[2][2]) * scalar;
-      const norm = Math.sqrt(m.reduce((acc, v) => acc + v*v, 0)) * scalar;
-      return { det, trace, norm };
+      return { det, trace, eigenvalues: null };
     }
   }, [matrix2D, matrix3D, mode, scalar]);
 
@@ -115,13 +112,6 @@ const App: React.FC = () => {
   };
 
   const handleResetMatrix = () => mode === '2D' ? setMatrix2D([[1, 0], [0, 1]]) : setMatrix3D([[1,0,0],[0,1,0],[0,0,1]]);
-  const handleResetVector = (i: number) => {
-    if (mode === '2D') {
-      const v = [...vectors2D]; v[i] = {...INITIAL_VECTORS_2D[i]}; setVectors2D(v);
-    } else {
-      const v = [...vectors3D]; v[i] = {...INITIAL_VECTORS_3D[i]}; setVectors3D(v);
-    }
-  };
 
   return (
     <div className="flex flex-col h-screen max-h-screen bg-slate-950 text-slate-100 overflow-hidden">
@@ -155,12 +145,19 @@ const App: React.FC = () => {
             setScalar={setScalar}
             showGrid={showGrid} setShowGrid={setShowGrid}
             showOriginalGrid={showOriginalGrid} setShowOriginalGrid={setShowOriginalGrid}
+            showEigenvectors={showEigenvectors} setShowEigenvectors={setShowEigenvectors}
             gridColor={gridColor} setGridColor={setGridColor}
             originalGridColor={originalGridColor} setOriginalGridColor={setOriginalGridColor}
             gridThickness={gridThickness} setGridThickness={setGridThickness}
             originalGridThickness={originalGridThickness} setOriginalGridThickness={setOriginalGridThickness}
             onResetMatrix={handleResetMatrix}
-            onResetVector={handleResetVector}
+            onResetVector={(i) => {
+              if (mode === '2D') {
+                const v = [...vectors2D]; v[i] = {...INITIAL_VECTORS_2D[i]}; setVectors2D(v);
+              } else {
+                const v = [...vectors3D]; v[i] = {...INITIAL_VECTORS_3D[i]}; setVectors3D(v);
+              }
+            }}
             onResetAll={() => { 
               handleResetMatrix(); 
               setVectors2D([...INITIAL_VECTORS_2D]); 
@@ -168,10 +165,9 @@ const App: React.FC = () => {
               setSelectedVectorIdx(0);
               setScalar(1.0);
               setShowOriginalGrid(true);
+              setShowEigenvectors(false);
               setGridColor('#6366f1');
               setOriginalGridColor('#ffffff');
-              setGridThickness(2.0);
-              setOriginalGridThickness(1.0);
               window.location.hash = ''; 
             }}
             onTranspose={handleTranspose}
@@ -192,11 +188,21 @@ const App: React.FC = () => {
 
             <div className="absolute top-4 right-4 z-30 flex flex-col gap-2 pointer-events-none">
               <div className="bg-slate-900/80 backdrop-blur-md border border-slate-700 p-3 rounded-lg shadow-2xl min-w-[140px]">
-                <div className="flex justify-between items-center mb-2"><span className="text-[10px] text-slate-500 font-bold uppercase">Analysis</span></div>
+                <div className="flex justify-between items-center mb-2"><span className="text-[10px] text-slate-500 font-bold uppercase">Properties</span></div>
                 <div className="space-y-1">
                   <div className="flex justify-between"><span className="text-[10px] text-slate-400">Det</span><span className={`text-xs font-mono ${Math.abs(matrixStats.det) < 0.01 ? 'text-rose-400' : 'text-emerald-400'}`}>{matrixStats.det.toFixed(2)}</span></div>
                   <div className="flex justify-between"><span className="text-[10px] text-slate-400">Trace</span><span className="text-xs font-mono text-indigo-400">{matrixStats.trace.toFixed(2)}</span></div>
-                  <div className="flex justify-between"><span className="text-[10px] text-slate-400">Norm</span><span className="text-xs font-mono text-orange-400">{matrixStats.norm.toFixed(2)}</span></div>
+                  {matrixStats.eigenvalues && (
+                    <div className="pt-1 mt-1 border-t border-slate-800">
+                      <span className="text-[8px] text-slate-500 uppercase block mb-1">Eigenvalues</span>
+                      <div className="flex justify-between text-[10px] font-mono text-amber-400">
+                        <span>λ₁</span><span>{matrixStats.eigenvalues[0].toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between text-[10px] font-mono text-rose-400">
+                        <span>λ₂</span><span>{matrixStats.eigenvalues[1].toFixed(2)}</span>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -209,6 +215,7 @@ const App: React.FC = () => {
                 scalar={scalar}
                 showGrid={showGrid} 
                 showOriginalGrid={showOriginalGrid} 
+                showEigenvectors={showEigenvectors}
                 gridColor={gridColor} 
                 originalGridColor={originalGridColor}
                 gridThickness={gridThickness}

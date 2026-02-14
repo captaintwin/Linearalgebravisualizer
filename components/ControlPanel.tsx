@@ -16,6 +16,7 @@ interface ControlPanelProps {
   setScalar: (s: number) => void;
   showGrid: boolean; setShowGrid: (b: boolean) => void;
   showOriginalGrid: boolean; setShowOriginalGrid: (b: boolean) => void;
+  showEigenvectors: boolean; setShowEigenvectors: (b: boolean) => void;
   gridColor: string; setGridColor: (c: string) => void;
   originalGridColor: string; setOriginalGridColor: (c: string) => void;
   gridThickness: number; setGridThickness: (t: number) => void;
@@ -168,9 +169,6 @@ const ControlPanel: React.FC<ControlPanelProps> = (props) => {
                     onChange={(e) => props.setScalar(parseFloat(e.target.value))}
                     className="w-full accent-amber-500 h-1.5 opacity-70 hover:opacity-100 transition-opacity"
                   />
-                  <div className="flex justify-between text-[8px] text-slate-600 font-bold">
-                    <span>Negative</span><span>Neutral (1.0)</span><span>Positive</span>
-                  </div>
                 </div>
               )}
             </section>
@@ -197,9 +195,8 @@ const ControlPanel: React.FC<ControlPanelProps> = (props) => {
                     >
                       <div className="flex justify-between items-center">
                         <div className="flex items-center gap-2">
-                           <div className={`w-2.5 h-2.5 rounded-full shadow-[0_0_8px] shadow-current transition-transform ${props.selectedVectorIdx === i ? 'scale-125' : ''}`} style={{backgroundColor: v.color, color: v.color}} />
+                           <div className={`w-2.5 h-2.5 rounded-full`} style={{backgroundColor: v.color}} />
                            <span className={`text-[10px] font-black uppercase ${props.selectedVectorIdx === i ? 'text-indigo-400' : 'text-slate-200'}`}>{v.label}</span>
-                           {props.selectedVectorIdx === i && <span className="text-[8px] bg-indigo-500 text-white px-1 rounded font-black uppercase">Main</span>}
                         </div>
                         <button onClick={(e) => { e.stopPropagation(); props.onResetVector(i); }} className="text-[9px] text-slate-500 hover:text-rose-400 transition-colors">↺</button>
                       </div>
@@ -225,15 +222,12 @@ const ControlPanel: React.FC<ControlPanelProps> = (props) => {
                         })}
                       </div>
 
-                      <div className="mt-2 pt-3 border-t border-slate-800/50 flex flex-col gap-2">
-                         <span className="text-[8px] text-slate-500 font-black uppercase tracking-widest">Transformation Result</span>
-                         <div className="bg-slate-950/40 p-2 rounded border border-slate-800 overflow-x-auto scrollbar-hide">
-                           <MathFormula 
-                             formula={getVectorFormula(v)} 
-                             className="text-[11px] font-mono scale-90 origin-left" 
-                             style={{ color: v.color }} 
-                           />
-                         </div>
+                      <div className="mt-2 pt-3 border-t border-slate-800/50">
+                         <MathFormula 
+                           formula={getVectorFormula(v)} 
+                           className="text-[11px] font-mono scale-90 origin-left" 
+                           style={{ color: v.color }} 
+                         />
                       </div>
                     </div>
                   ))}
@@ -241,7 +235,7 @@ const ControlPanel: React.FC<ControlPanelProps> = (props) => {
               )}
             </section>
 
-            {/* Presets Section - Grid Layout */}
+            {/* Presets Section */}
             <section className="space-y-4">
               <div 
                 className="flex justify-between items-center cursor-pointer group"
@@ -259,8 +253,7 @@ const ControlPanel: React.FC<ControlPanelProps> = (props) => {
                     <button 
                       key={n} 
                       onClick={() => props.mode === '2D' ? props.setMatrix2D(PRESET_TRANSFORMATIONS_2D[n]) : props.setMatrix3D(PRESET_TRANSFORMATIONS_3D[n])}
-                      title={n}
-                      className="text-[8px] leading-tight bg-indigo-500/5 hover:bg-indigo-500/20 text-slate-400 hover:text-indigo-300 px-1 py-2.5 rounded border border-slate-800 hover:border-indigo-500/30 transition-all font-bold text-center overflow-hidden text-ellipsis"
+                      className="text-[8px] leading-tight bg-indigo-500/5 hover:bg-indigo-500/20 text-slate-400 hover:text-indigo-300 px-1 py-2.5 rounded border border-slate-800 hover:border-indigo-500/30 transition-all font-bold text-center"
                     >
                       {n}
                     </button>
@@ -277,75 +270,47 @@ const ControlPanel: React.FC<ControlPanelProps> = (props) => {
               Copy Workspace Link
             </button>
             <div className="flex flex-col gap-6 pt-6 border-t border-slate-800">
-              
               <div className="space-y-4">
                 <h4 className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Visibility</h4>
-                <label className="flex items-center justify-between cursor-pointer group">
-                  <div className="flex items-center gap-3">
-                    <input type="checkbox" checked={props.showGrid} onChange={(e) => props.setShowGrid(e.target.checked)} className="w-5 h-5 rounded-md bg-slate-950 border-slate-800 accent-indigo-600 focus:ring-0" />
-                    <span className="text-[11px] text-slate-500 group-hover:text-slate-300 font-black uppercase transition-colors">Show Transformed Space</span>
-                  </div>
-                </label>
-                <label className="flex items-center justify-between cursor-pointer group">
-                  <div className="flex items-center gap-3">
-                    <input type="checkbox" checked={props.showOriginalGrid} onChange={(e) => props.setShowOriginalGrid(e.target.checked)} className="w-5 h-5 rounded-md bg-slate-950 border-slate-800 accent-slate-500 focus:ring-0" />
-                    <span className="text-[11px] text-slate-500 group-hover:text-slate-300 font-black uppercase transition-colors">Show Identity Basis</span>
-                  </div>
-                </label>
+                <div className="space-y-3">
+                  <label className="flex items-center gap-3 cursor-pointer group">
+                    <input type="checkbox" checked={props.showGrid} onChange={(e) => props.setShowGrid(e.target.checked)} className="w-4 h-4 accent-indigo-600" />
+                    <span className="text-[11px] text-slate-500 group-hover:text-slate-300 font-black uppercase">Show Transformed Space</span>
+                  </label>
+                  <label className="flex items-center gap-3 cursor-pointer group">
+                    <input type="checkbox" checked={props.showOriginalGrid} onChange={(e) => props.setShowOriginalGrid(e.target.checked)} className="w-4 h-4 accent-slate-500" />
+                    <span className="text-[11px] text-slate-500 group-hover:text-slate-300 font-black uppercase">Show Identity Basis</span>
+                  </label>
+                  {props.mode === '2D' && (
+                    <label className="flex items-center gap-3 cursor-pointer group">
+                      <input type="checkbox" checked={props.showEigenvectors} onChange={(e) => props.setShowEigenvectors(e.target.checked)} className="w-4 h-4 accent-amber-500" />
+                      <span className="text-[11px] text-slate-500 group-hover:text-slate-300 font-black uppercase">Show Eigenvectors (2D)</span>
+                    </label>
+                  )}
+                </div>
               </div>
 
               <div className="space-y-4">
                 <h4 className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Space Styling</h4>
-                <div className="flex flex-col gap-5">
-                   {/* Transformed Grid Styling */}
+                <div className="space-y-5">
                    <div className="space-y-2">
                      <div className="flex items-center justify-between">
-                       <span className="text-[11px] text-slate-400 font-bold uppercase">Transformed Grid (Matrix)</span>
-                       <input 
-                         type="color" 
-                         value={props.gridColor} 
-                         onChange={(e) => props.setGridColor(e.target.value)} 
-                         className="w-10 h-6 bg-transparent border-none cursor-pointer"
-                       />
+                       <span className="text-[10px] text-slate-400 font-bold uppercase">Matrix Grid Color</span>
+                       <input type="color" value={props.gridColor} onChange={(e) => props.setGridColor(e.target.value)} className="w-8 h-5 bg-transparent border-none cursor-pointer" />
                      </div>
-                     <input 
-                       type="range" min="0.1" max="4" step="0.1" 
-                       value={props.gridThickness} 
-                       onChange={(e) => props.setGridThickness(parseFloat(e.target.value))}
-                       className="w-full accent-indigo-500 h-1.5"
-                     />
-                     <div className="flex justify-between text-[8px] text-slate-600 font-bold">
-                       <span>Fine</span><span>Thick ({props.gridThickness.toFixed(1)}px)</span>
-                     </div>
+                     <input type="range" min="0.1" max="4" step="0.1" value={props.gridThickness} onChange={(e) => props.setGridThickness(parseFloat(e.target.value))} className="w-full accent-indigo-500 h-1" />
                    </div>
-
-                   {/* Original Grid Styling */}
                    <div className="space-y-2">
                      <div className="flex items-center justify-between">
-                       <span className="text-[11px] text-slate-400 font-bold uppercase">Identity Basis Grid</span>
-                       <input 
-                         type="color" 
-                         value={props.originalGridColor} 
-                         onChange={(e) => props.setOriginalGridColor(e.target.value)} 
-                         className="w-10 h-6 bg-transparent border-none cursor-pointer"
-                       />
+                       <span className="text-[10px] text-slate-400 font-bold uppercase">Basis Grid Color</span>
+                       <input type="color" value={props.originalGridColor} onChange={(e) => props.setOriginalGridColor(e.target.value)} className="w-8 h-5 bg-transparent border-none cursor-pointer" />
                      </div>
-                     <input 
-                       type="range" min="0.1" max="4" step="0.1" 
-                       value={props.originalGridThickness} 
-                       onChange={(e) => props.setOriginalGridThickness(parseFloat(e.target.value))}
-                       className="w-full accent-slate-500 h-1.5"
-                     />
-                     <div className="flex justify-between text-[8px] text-slate-600 font-bold">
-                       <span>Fine</span><span>Thick ({props.originalGridThickness.toFixed(1)}px)</span>
-                     </div>
+                     <input type="range" min="0.1" max="4" step="0.1" value={props.originalGridThickness} onChange={(e) => props.setOriginalGridThickness(parseFloat(e.target.value))} className="w-full accent-slate-500 h-1" />
                    </div>
                 </div>
               </div>
 
-              <div className="flex justify-end pt-2">
-                <button onClick={props.onResetAll} className="text-rose-500/80 hover:text-rose-400 text-[10px] font-black uppercase transition-colors">Reset Lab</button>
-              </div>
+              <button onClick={props.onResetAll} className="text-rose-500/80 hover:text-rose-400 text-[10px] font-black uppercase transition-colors text-right">Reset Lab</button>
             </div>
           </div>
         )}
@@ -353,12 +318,8 @@ const ControlPanel: React.FC<ControlPanelProps> = (props) => {
 
       <style>{`
         .custom-scrollbar::-webkit-scrollbar { width: 4px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 10px; }
-        
         .custom-scrollbar-h::-webkit-scrollbar { height: 4px; }
-        .custom-scrollbar-h::-webkit-scrollbar-track { background: rgba(30, 41, 59, 0.2); }
-        .custom-scrollbar-h::-webkit-scrollbar { height: 4px; background: rgba(30, 41, 59, 0.2); border-radius: 10px; }
         .custom-scrollbar-h::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
       `}</style>
     </div>
