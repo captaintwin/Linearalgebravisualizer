@@ -1,6 +1,6 @@
 
 // App.tsx
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import * as THREE from 'three';
 import VectorCanvas from './components/VectorCanvas';
 import VectorCanvas3D from './components/VectorCanvas3D';
@@ -26,6 +26,84 @@ const App: React.FC = () => {
   // UI States
   const [isKernelCollapsed, setIsKernelCollapsed] = useState<boolean>(false);
   const [isPropertiesCollapsed, setIsPropertiesCollapsed] = useState<boolean>(false);
+  const [kernelPosition, setKernelPosition] = useState<{ x: number; y: number }>({ x: 24, y: 24 });
+  const [propertiesPosition, setPropertiesPosition] = useState<{ x: number; y: number }>({ x: 280, y: 80 });
+  const kernelDragRef = useRef({ active: false, startClientX: 0, startClientY: 0, startX: 0, startY: 0 });
+  const propertiesDragRef = useRef({ active: false, startClientX: 0, startClientY: 0, startX: 0, startY: 0 });
+  const kernelJustDraggedRef = useRef(false);
+  const propertiesJustDraggedRef = useRef(false);
+  const kernelPanelRectRef = useRef({ x: 0, y: 0, w: 48, h: 48, collapsed: false });
+  const propertiesPanelRectRef = useRef({ x: 0, y: 0, w: 48, h: 48, collapsed: false });
+  const kernelCollapsedPositionRef = useRef({ x: 24, y: 24 });
+  const propertiesCollapsedPositionRef = useRef({ x: 280, y: 80 });
+  const prevKernelCollapsedRef = useRef(isKernelCollapsed);
+  const prevPropertiesCollapsedRef = useRef(isPropertiesCollapsed);
+  const viewerRef = useRef<HTMLDivElement>(null);
+  const kernelRef = useRef<HTMLDivElement>(null);
+  const propertiesRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (kernelRef.current) kernelPanelRectRef.current = { x: kernelPosition.x, y: kernelPosition.y, w: kernelRef.current.offsetWidth, h: kernelRef.current.offsetHeight, collapsed: isKernelCollapsed };
+    if (propertiesRef.current) propertiesPanelRectRef.current = { x: propertiesPosition.x, y: propertiesPosition.y, w: propertiesRef.current.offsetWidth, h: propertiesRef.current.offsetHeight, collapsed: isPropertiesCollapsed };
+  }, [kernelPosition, propertiesPosition, isKernelCollapsed, isPropertiesCollapsed]);
+
+  // Sync collapsed position ref when panel is collapsed (so drag updates it). Skip when we just collapsed — current position is still the expanded one; let clamp effect restore and update prev.
+  useEffect(() => {
+    if (!isKernelCollapsed) {
+      prevKernelCollapsedRef.current = false;
+    } else if (prevKernelCollapsedRef.current !== false) {
+      kernelCollapsedPositionRef.current = kernelPosition;
+    }
+    if (!isPropertiesCollapsed) {
+      prevPropertiesCollapsedRef.current = false;
+    } else if (prevPropertiesCollapsedRef.current !== false) {
+      propertiesCollapsedPositionRef.current = propertiesPosition;
+    }
+  }, [isKernelCollapsed, kernelPosition, isPropertiesCollapsed, propertiesPosition]);
+
+  // Keep expanded panels inside viewer; restore collapsed position when collapsing
+  useEffect(() => {
+    const justKernelCollapsed = isKernelCollapsed && !prevKernelCollapsedRef.current;
+    const justPropertiesCollapsed = isPropertiesCollapsed && !prevPropertiesCollapsedRef.current;
+    prevKernelCollapsedRef.current = isKernelCollapsed;
+    prevPropertiesCollapsedRef.current = isPropertiesCollapsed;
+
+    if (justKernelCollapsed) setKernelPosition({ ...kernelCollapsedPositionRef.current });
+    if (justPropertiesCollapsed) setPropertiesPosition({ ...propertiesCollapsedPositionRef.current });
+
+    const clamp = () => {
+      const v = viewerRef.current;
+      const k = kernelRef.current;
+      const p = propertiesRef.current;
+      if (!v) return;
+      const vw = v.offsetWidth;
+      const vh = v.offsetHeight;
+      if (!isKernelCollapsed && k) {
+        const kw = k.offsetWidth;
+        const kh = k.offsetHeight;
+        setKernelPosition(prev => ({
+          x: Math.max(0, Math.min(vw - kw, prev.x)),
+          y: Math.max(0, Math.min(vh - kh, prev.y))
+        }));
+      }
+      if (!isPropertiesCollapsed && p) {
+        const pw = p.offsetWidth;
+        const ph = p.offsetHeight;
+        setPropertiesPosition(prev => ({
+          x: Math.max(0, Math.min(vw - pw, prev.x)),
+          y: Math.max(0, Math.min(vh - ph, prev.y))
+        }));
+      }
+    };
+    const id = setTimeout(clamp, 0);
+    const viewer = viewerRef.current;
+    const ro = viewer ? new ResizeObserver(clamp) : undefined;
+    if (viewer) ro?.observe(viewer);
+    return () => {
+      clearTimeout(id);
+      if (viewer && ro) ro.disconnect();
+    };
+  }, [isKernelCollapsed, isPropertiesCollapsed]);
 
   // Settings
   const [showGrid, setShowGrid] = useState<boolean>(true);
@@ -176,6 +254,112 @@ const App: React.FC = () => {
     }
   }, [matrix2D, matrix3D, mode, scalar]);
 
+  const handleKernelPointerDown = useCallback((e: React.PointerEvent) => {
+    if ((e.target as HTMLElement).closest('[data-no-drag]')) return;
+    const viewer = viewerRef.current;
+    const kernel = kernelRef.current;
+    if (!viewer || !kernel) return;
+    kernelDragRef.current = {
+      active: true,
+      startClientX: e.clientX,
+      startClientY: e.clientY,
+      startX: kernelPosition.x,
+      startY: kernelPosition.y
+    };
+    let didMove = false;
+    const onMove = (ev: PointerEvent) => {
+      didMove = true;
+      const v = viewerRef.current;
+      const k = kernelRef.current;
+      if (!v || !k) return;
+      const { startClientX, startClientY, startX, startY } = kernelDragRef.current;
+      const vr = v.getBoundingClientRect();
+      const kw = k.offsetWidth;
+      const kh = k.offsetHeight;
+      const maxX = Math.max(0, vr.width - kw);
+      const maxY = Math.max(0, vr.height - kh);
+      let newX = Math.max(0, Math.min(maxX, startX + (ev.clientX - startClientX)));
+      let newY = Math.max(0, Math.min(maxY, startY + (ev.clientY - startClientY)));
+      const other = propertiesPanelRectRef.current;
+      const gap = 8;
+      if (other.collapsed && newX + kw + gap > other.x && newX < other.x + other.w + gap && newY + kh + gap > other.y && newY < other.y + other.h + gap) {
+        const overlapLeft = newX + kw + gap - other.x;
+        const overlapRight = other.x + other.w + gap - newX;
+        const overlapTop = newY + kh + gap - other.y;
+        const overlapBottom = other.y + other.h + gap - newY;
+        const minO = Math.min(overlapLeft, overlapRight, overlapTop, overlapBottom);
+        if (minO === overlapLeft) newX = other.x - kw - gap;
+        else if (minO === overlapRight) newX = other.x + other.w + gap;
+        else if (minO === overlapTop) newY = other.y - kh - gap;
+        else newY = other.y + other.h + gap;
+        newX = Math.max(0, Math.min(maxX, newX));
+        newY = Math.max(0, Math.min(maxY, newY));
+      }
+      setKernelPosition({ x: newX, y: newY });
+    };
+    const onUp = () => {
+      kernelDragRef.current.active = false;
+      if (didMove) kernelJustDraggedRef.current = true;
+      document.removeEventListener('pointermove', onMove);
+      document.removeEventListener('pointerup', onUp);
+    };
+    document.addEventListener('pointermove', onMove);
+    document.addEventListener('pointerup', onUp);
+  }, [kernelPosition]);
+
+  const handlePropertiesPointerDown = useCallback((e: React.PointerEvent) => {
+    if ((e.target as HTMLElement).closest('[data-no-drag]')) return;
+    const viewer = viewerRef.current;
+    const panel = propertiesRef.current;
+    if (!viewer || !panel) return;
+    propertiesDragRef.current = {
+      active: true,
+      startClientX: e.clientX,
+      startClientY: e.clientY,
+      startX: propertiesPosition.x,
+      startY: propertiesPosition.y
+    };
+    let didMove = false;
+    const onMove = (ev: PointerEvent) => {
+      didMove = true;
+      const v = viewerRef.current;
+      const p = propertiesRef.current;
+      if (!v || !p) return;
+      const { startClientX, startClientY, startX, startY } = propertiesDragRef.current;
+      const vr = v.getBoundingClientRect();
+      const pw = p.offsetWidth;
+      const ph = p.offsetHeight;
+      const maxX = Math.max(0, vr.width - pw);
+      const maxY = Math.max(0, vr.height - ph);
+      let newX = Math.max(0, Math.min(maxX, startX + (ev.clientX - startClientX)));
+      let newY = Math.max(0, Math.min(maxY, startY + (ev.clientY - startClientY)));
+      const other = kernelPanelRectRef.current;
+      const gap = 8;
+      if (other.collapsed && newX + pw + gap > other.x && newX < other.x + other.w + gap && newY + ph + gap > other.y && newY < other.y + other.h + gap) {
+        const overlapLeft = newX + pw + gap - other.x;
+        const overlapRight = other.x + other.w + gap - newX;
+        const overlapTop = newY + ph + gap - other.y;
+        const overlapBottom = other.y + other.h + gap - newY;
+        const minO = Math.min(overlapLeft, overlapRight, overlapTop, overlapBottom);
+        if (minO === overlapLeft) newX = other.x - pw - gap;
+        else if (minO === overlapRight) newX = other.x + other.w + gap;
+        else if (minO === overlapTop) newY = other.y - ph - gap;
+        else newY = other.y + other.h + gap;
+        newX = Math.max(0, Math.min(maxX, newX));
+        newY = Math.max(0, Math.min(maxY, newY));
+      }
+      setPropertiesPosition({ x: newX, y: newY });
+    };
+    const onUp = () => {
+      propertiesDragRef.current.active = false;
+      if (didMove) propertiesJustDraggedRef.current = true;
+      document.removeEventListener('pointermove', onMove);
+      document.removeEventListener('pointerup', onUp);
+    };
+    document.addEventListener('pointermove', onMove);
+    document.addEventListener('pointerup', onUp);
+  }, [propertiesPosition]);
+
   const transformationMainFormula = useMemo(() => {
     if (mode === '2D') {
       const [[a, b], [c, d]] = matrix2D;
@@ -266,12 +450,23 @@ const App: React.FC = () => {
         </aside>
 
         <div className="flex-[1.5] lg:flex-1 p-4 lg:p-8 flex flex-col gap-8 overflow-y-auto order-1 lg:order-2 bg-slate-950 relative z-10 custom-scrollbar">
-          <div className="h-64 sm:h-[400px] lg:flex-1 relative group shrink-0 rounded-2xl overflow-hidden border border-slate-800/50 shadow-2xl">
+          <div ref={viewerRef} className="h-64 sm:h-[400px] lg:flex-1 relative group shrink-0 rounded-2xl overflow-hidden border border-slate-800/50 shadow-2xl">
             
-            {/* Overlay Formula (Kernel) */}
+            {/* Overlay Formula (Kernel) - draggable */}
             <div 
-              className={`absolute top-6 left-6 z-30 bg-slate-900/90 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl transition-all duration-300 ${isKernelCollapsed ? 'w-12 h-12 p-0 flex items-center justify-center cursor-pointer hover:bg-slate-800' : 'p-5 max-w-[90%] overflow-x-auto border-indigo-500/20'}`}
-              onClick={() => isKernelCollapsed && setIsKernelCollapsed(false)}
+              ref={kernelRef}
+              role="presentation"
+              className={`absolute z-30 backdrop-blur-xl rounded-2xl shadow-2xl transition-shadow duration-300 select-none ${isKernelCollapsed ? 'w-12 h-12 p-0 flex items-center justify-center cursor-grab bg-indigo-600 border-2 border-indigo-400 shadow-lg shadow-indigo-500/30 hover:bg-indigo-500 active:cursor-grabbing' : 'p-5 max-w-[90%] overflow-hidden bg-slate-900/50 border border-white/10 border-indigo-500/20 cursor-grab active:cursor-grabbing'}`}
+              style={{ left: kernelPosition.x, top: kernelPosition.y }}
+              onPointerDown={handleKernelPointerDown}
+              onClick={() => {
+                if (!isKernelCollapsed) return;
+                if (kernelJustDraggedRef.current) {
+                  kernelJustDraggedRef.current = false;
+                  return;
+                }
+                setIsKernelCollapsed(false);
+              }}
             >
                {!isKernelCollapsed ? (
                  <>
@@ -281,26 +476,38 @@ const App: React.FC = () => {
                       Transformation Kernel
                     </div>
                     <button 
+                      data-no-drag
                       onClick={(e) => { e.stopPropagation(); setIsKernelCollapsed(true); }}
-                      className="text-slate-500 hover:text-white transition-colors ml-4"
+                      className="text-slate-500 hover:text-white transition-colors ml-4 cursor-pointer"
                       title="Minimize"
                     >
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" /></svg>
                     </button>
                   </div>
-                  <MathFormula formula={transformationMainFormula} className="text-sm md:text-lg text-white font-mono" />
+                  <MathFormula formula={transformationMainFormula} className="text-xs md:text-base text-white font-mono" />
                  </>
                ) : (
-                 <button className="text-indigo-400 animate-pulse" title="Expand Kernel">
+                 <button className="text-white drop-shadow-md" title="Expand Kernel">
                     <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" /></svg>
                  </button>
                )}
             </div>
 
-            {/* Matrix Properties Overlay */}
+            {/* Linear Properties Overlay - draggable, semi-transparent */}
             <div 
-              className={`absolute bottom-6 right-6 z-30 bg-slate-900/95 backdrop-blur-md border border-slate-700/50 rounded-2xl shadow-2xl transition-all duration-300 ${isPropertiesCollapsed ? 'w-12 h-12 p-0 flex items-center justify-center cursor-pointer hover:bg-slate-800' : 'p-6 min-w-[240px] pointer-events-auto'}`}
-              onClick={() => isPropertiesCollapsed && setIsPropertiesCollapsed(false)}
+              ref={propertiesRef}
+              role="presentation"
+              className={`absolute z-30 backdrop-blur-md rounded-2xl shadow-2xl transition-shadow duration-300 select-none ${isPropertiesCollapsed ? 'w-12 h-12 p-0 flex items-center justify-center cursor-grab bg-amber-600 border-2 border-amber-400 shadow-lg shadow-amber-500/30 hover:bg-amber-500 active:cursor-grabbing' : 'p-6 min-w-[240px] overflow-hidden bg-slate-900/50 border border-slate-700/50 cursor-grab active:cursor-grabbing'}`}
+              style={{ left: propertiesPosition.x, top: propertiesPosition.y }}
+              onPointerDown={handlePropertiesPointerDown}
+              onClick={() => {
+                if (!isPropertiesCollapsed) return;
+                if (propertiesJustDraggedRef.current) {
+                  propertiesJustDraggedRef.current = false;
+                  return;
+                }
+                setIsPropertiesCollapsed(false);
+              }}
             >
               {!isPropertiesCollapsed ? (
                 <>
@@ -309,8 +516,9 @@ const App: React.FC = () => {
                     <div className="flex items-center gap-2">
                       <div className="px-2 py-0.5 rounded-full bg-indigo-500/10 text-[9px] text-indigo-400 font-bold border border-indigo-500/20 uppercase">Real-Time</div>
                       <button 
+                        data-no-drag
                         onClick={(e) => { e.stopPropagation(); setIsPropertiesCollapsed(true); }}
-                        className="text-slate-500 hover:text-white transition-colors"
+                        className="text-slate-500 hover:text-white transition-colors cursor-pointer"
                         title="Minimize"
                       >
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" /></svg>
@@ -334,10 +542,10 @@ const App: React.FC = () => {
                       </div>
                     </div>
 
-                    <div className="pt-4 border-t border-slate-800">
+                    <div className="pt-4 border-t border-slate-800 min-w-0">
                       <span className="text-[9px] text-slate-500 font-black uppercase tracking-widest block mb-2">Char Polynomial</span>
-                      <div className="bg-slate-950/50 p-3 rounded-xl border border-slate-800 overflow-x-auto flex justify-center">
-                        <MathFormula formula={matrixStats.charEq} className="text-xs text-white" />
+                      <div className="bg-slate-950/50 p-3 rounded-xl border border-slate-800 overflow-hidden flex justify-center items-center min-w-0">
+                        <MathFormula formula={matrixStats.charEq} className="text-xs text-white max-w-full overflow-hidden" />
                       </div>
                     </div>
 
@@ -357,7 +565,7 @@ const App: React.FC = () => {
                   </div>
                 </>
               ) : (
-                <button className="text-slate-400" title="Expand Properties">
+                <button className="text-white drop-shadow-md" title="Expand Properties">
                   <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                 </button>
               )}

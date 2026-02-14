@@ -1,7 +1,7 @@
 
 import React, { useEffect, useRef, useMemo } from 'react';
 import * as THREE from 'three';
-import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { Vector3D, Matrix3x3 } from '../types';
 
 interface VectorCanvas3DProps {
@@ -109,9 +109,11 @@ const VectorCanvas3D: React.FC<VectorCanvas3DProps> = ({
   };
 
   useEffect(() => {
-    if (!containerRef.current) return;
-    const width = containerRef.current.clientWidth;
-    const height = containerRef.current.clientHeight;
+    const container = containerRef.current;
+    if (!container) return;
+
+    const width = Math.max(container.clientWidth || 1, 1);
+    const height = Math.max(container.clientHeight || 1, 1);
 
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x0a0f1e);
@@ -213,6 +215,17 @@ const VectorCanvas3D: React.FC<VectorCanvas3DProps> = ({
     renderer.domElement.addEventListener('pointermove', handlePointerMove);
     renderer.domElement.addEventListener('pointerup', handlePointerUp);
 
+    const resize = () => {
+      if (!container) return;
+      const w = Math.max(container.clientWidth || 1, 1);
+      const h = Math.max(container.clientHeight || 1, 1);
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+      renderer.setSize(w, h);
+    };
+    const ro = new ResizeObserver(resize);
+    ro.observe(container);
+
     let aniId: number;
     const animate = () => {
       aniId = requestAnimationFrame(animate);
@@ -222,13 +235,14 @@ const VectorCanvas3D: React.FC<VectorCanvas3DProps> = ({
     animate();
 
     return () => {
+      ro.disconnect();
       renderer.domElement.removeEventListener('pointerdown', handlePointerDown);
       renderer.domElement.removeEventListener('pointermove', handlePointerMove);
       renderer.domElement.removeEventListener('pointerup', handlePointerUp);
       cancelAnimationFrame(aniId);
       renderer.dispose();
-      if (containerRef.current?.contains(renderer.domElement)) {
-        containerRef.current.removeChild(renderer.domElement);
+      if (container.contains(renderer.domElement)) {
+        container.removeChild(renderer.domElement);
       }
     };
   }, []); 

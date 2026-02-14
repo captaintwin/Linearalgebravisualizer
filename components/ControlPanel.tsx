@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Matrix2x2, Matrix3x3, Vector2D, Vector3D, DimensionMode, ControlTab } from '../types';
 import { PRESET_TRANSFORMATIONS_2D, PRESET_TRANSFORMATIONS_3D } from '../constants';
 import MathFormula from './MathFormula';
@@ -28,9 +28,37 @@ interface ControlPanelProps {
   onShare: () => void;
 }
 
+const DEG2RAD = Math.PI / 180;
+
+function rotation2D(deg: number): Matrix2x2 {
+  const rad = deg * DEG2RAD;
+  const c = Math.cos(rad);
+  const s = Math.sin(rad);
+  return [[c, -s], [s, c]];
+}
+
+function rotation3D(axis: 'X' | 'Y' | 'Z', deg: number): Matrix3x3 {
+  const rad = deg * DEG2RAD;
+  const c = Math.cos(rad);
+  const s = Math.sin(rad);
+  if (axis === 'X') return [[1, 0, 0], [0, c, -s], [0, s, c]];
+  if (axis === 'Y') return [[c, 0, s], [0, 1, 0], [-s, 0, c]];
+  return [[c, -s, 0], [s, c, 0], [0, 0, 1]];
+}
+
 const ControlPanel: React.FC<ControlPanelProps> = (props) => {
   const [activeTab, setActiveTab] = useState<Exclude<ControlTab, 'operations'>>('transform');
-  const [expanded, setExpanded] = useState({ matrix: true, scalar: true, vectors: true, presets: true });
+  const [expanded, setExpanded] = useState({ matrix: true, scalar: true, vectors: true, presets: true, rotation: true });
+  const [rotationAngleDeg, setRotationAngleDeg] = useState(45);
+  const [rotationAxis3D, setRotationAxis3D] = useState<'X' | 'Y' | 'Z'>('Z');
+
+  useEffect(() => {
+    if (props.mode === '2D') {
+      props.setMatrix2D(rotation2D(rotationAngleDeg));
+    } else {
+      props.setMatrix3D(rotation3D(rotationAxis3D, rotationAngleDeg));
+    }
+  }, [props.mode, rotationAngleDeg, rotationAxis3D]);
 
   const toggleSection = (section: keyof typeof expanded) => {
     setExpanded(prev => ({ ...prev, [section]: !prev[section] }));
@@ -136,6 +164,75 @@ const ControlPanel: React.FC<ControlPanelProps> = (props) => {
                         </div>
                       );
                     })
+                  )}
+                </div>
+              )}
+            </section>
+
+            {/* Rotation Section */}
+            <section className="space-y-4">
+              <div 
+                className="flex justify-between items-center cursor-pointer group"
+                onClick={() => toggleSection('rotation')}
+              >
+                <div className="flex items-center gap-2">
+                  <span className={`text-emerald-500 transition-transform ${expanded.rotation ? 'rotate-0' : '-rotate-90'}`}>▼</span>
+                  <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-widest group-hover:text-slate-300">Rotation</h3>
+                </div>
+              </div>
+
+              {expanded.rotation && (
+                <div className="bg-slate-950/50 p-6 rounded-2xl border border-slate-800 shadow-inner space-y-5 animate-in fade-in slide-in-from-top-2 duration-300">
+                  {props.mode === '2D' ? (
+                    <>
+                      <div className="space-y-2">
+                        <div className="flex justify-between items-center text-[10px]">
+                          <span className="text-slate-500 font-bold uppercase">Angle (degrees)</span>
+                          <span className="text-emerald-400 font-mono font-bold">{rotationAngleDeg}°</span>
+                        </div>
+                        <input
+                          type="range"
+                          min="-180"
+                          max="180"
+                          step="1"
+                          value={rotationAngleDeg}
+                          onChange={(e) => setRotationAngleDeg(parseFloat(e.target.value))}
+                          className="w-full accent-emerald-500 h-1.5 opacity-70 hover:opacity-100 transition-opacity"
+                        />
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="space-y-2">
+                        <span className="text-[10px] text-slate-500 font-bold uppercase">Axis</span>
+                        <div className="flex gap-2">
+                          {(['X', 'Y', 'Z'] as const).map(ax => (
+                            <button
+                              key={ax}
+                              onClick={() => setRotationAxis3D(ax)}
+                              className={`flex-1 py-2 rounded-lg text-[10px] font-black uppercase transition-all ${rotationAxis3D === ax ? 'bg-emerald-600 text-white border border-emerald-400' : 'bg-slate-800 text-slate-400 border border-slate-700 hover:border-slate-600'}`}
+                            >
+                              {ax}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <div className="flex justify-between items-center text-[10px]">
+                          <span className="text-slate-500 font-bold uppercase">Angle (degrees)</span>
+                          <span className="text-emerald-400 font-mono font-bold">{rotationAngleDeg}°</span>
+                        </div>
+                        <input
+                          type="range"
+                          min="-180"
+                          max="180"
+                          step="1"
+                          value={rotationAngleDeg}
+                          onChange={(e) => setRotationAngleDeg(parseFloat(e.target.value))}
+                          className="w-full accent-emerald-500 h-1.5 opacity-70 hover:opacity-100 transition-opacity"
+                        />
+                      </div>
+                    </>
                   )}
                 </div>
               )}
