@@ -27,7 +27,7 @@ const App: React.FC = () => {
   const [isKernelCollapsed, setIsKernelCollapsed] = useState<boolean>(false);
   const [isPropertiesCollapsed, setIsPropertiesCollapsed] = useState<boolean>(false);
   const [kernelPosition, setKernelPosition] = useState<{ x: number; y: number }>({ x: 24, y: 24 });
-  const [propertiesPosition, setPropertiesPosition] = useState<{ x: number; y: number }>({ x: 280, y: 80 });
+  const [propertiesPosition, setPropertiesPosition] = useState<{ x: number; y: number }>({ x: 0, y: 24 });
   const kernelDragRef = useRef({ active: false, startClientX: 0, startClientY: 0, startX: 0, startY: 0 });
   const propertiesDragRef = useRef({ active: false, startClientX: 0, startClientY: 0, startX: 0, startY: 0 });
   const kernelJustDraggedRef = useRef(false);
@@ -35,12 +35,31 @@ const App: React.FC = () => {
   const kernelPanelRectRef = useRef({ x: 0, y: 0, w: 48, h: 48, collapsed: false });
   const propertiesPanelRectRef = useRef({ x: 0, y: 0, w: 48, h: 48, collapsed: false });
   const kernelCollapsedPositionRef = useRef({ x: 24, y: 24 });
-  const propertiesCollapsedPositionRef = useRef({ x: 280, y: 80 });
+  const propertiesCollapsedPositionRef = useRef({ x: 0, y: 24 });
+  const propertiesInitialPlacementDone = useRef(false);
   const prevKernelCollapsedRef = useRef(isKernelCollapsed);
   const prevPropertiesCollapsedRef = useRef(isPropertiesCollapsed);
   const viewerRef = useRef<HTMLDivElement>(null);
   const kernelRef = useRef<HTMLDivElement>(null);
   const propertiesRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (propertiesInitialPlacementDone.current) return;
+    const place = () => {
+      const v = viewerRef.current;
+      const p = propertiesRef.current;
+      if (!v || !p) return;
+      const vw = v.offsetWidth;
+      const pw = p.offsetWidth;
+      if (vw < 10) return;
+      const x = Math.max(0, vw - pw - 24);
+      setPropertiesPosition({ x, y: 24 });
+      propertiesCollapsedPositionRef.current = { x, y: 24 };
+      propertiesInitialPlacementDone.current = true;
+    };
+    const t = setTimeout(place, 0);
+    return () => clearTimeout(t);
+  }, []);
 
   useEffect(() => {
     if (kernelRef.current) kernelPanelRectRef.current = { x: kernelPosition.x, y: kernelPosition.y, w: kernelRef.current.offsetWidth, h: kernelRef.current.offsetHeight, collapsed: isKernelCollapsed };
