@@ -241,7 +241,7 @@ const ControlPanel: React.FC<ControlPanelProps> = (props) => {
               )}
             </section>
 
-            {/* Presets Section */}
+            {/* Presets Section - Grid Layout */}
             <section className="space-y-4">
               <div 
                 className="flex justify-between items-center cursor-pointer group"
@@ -254,10 +254,14 @@ const ControlPanel: React.FC<ControlPanelProps> = (props) => {
               </div>
 
               {expanded.presets && (
-                <div className="flex gap-2 overflow-x-auto pb-4 custom-scrollbar-h animate-in fade-in slide-in-from-top-2 duration-300">
+                <div className="grid grid-cols-3 gap-2 animate-in fade-in slide-in-from-top-2 duration-300">
                   {Object.keys(props.mode === '2D' ? PRESET_TRANSFORMATIONS_2D : PRESET_TRANSFORMATIONS_3D).map(n => (
-                    <button key={n} onClick={() => props.mode === '2D' ? props.setMatrix2D(PRESET_TRANSFORMATIONS_2D[n]) : props.setMatrix3D(PRESET_TRANSFORMATIONS_3D[n])}
-                      className="text-[9px] bg-indigo-500/5 hover:bg-indigo-500/20 text-slate-400 hover:text-indigo-300 px-4 py-2 rounded-lg border border-slate-800 hover:border-indigo-500/30 transition-all font-bold shrink-0 whitespace-nowrap">
+                    <button 
+                      key={n} 
+                      onClick={() => props.mode === '2D' ? props.setMatrix2D(PRESET_TRANSFORMATIONS_2D[n]) : props.setMatrix3D(PRESET_TRANSFORMATIONS_3D[n])}
+                      title={n}
+                      className="text-[8px] leading-tight bg-indigo-500/5 hover:bg-indigo-500/20 text-slate-400 hover:text-indigo-300 px-1 py-2.5 rounded border border-slate-800 hover:border-indigo-500/30 transition-all font-bold text-center overflow-hidden text-ellipsis"
+                    >
                       {n}
                     </button>
                   ))}
