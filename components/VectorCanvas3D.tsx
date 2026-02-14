@@ -12,17 +12,19 @@ interface VectorCanvas3DProps {
   matrix: Matrix3x3;
   vectors: Vector3D[];
   setVectors: React.Dispatch<React.SetStateAction<Vector3D[]>>;
+  scalar: number;
   showGrid: boolean;
   gridColor: string;
 }
 
-const VectorCanvas3D: React.FC<VectorCanvas3DProps> = ({ matrix, vectors, setVectors, showGrid, gridColor }) => {
+const VectorCanvas3D: React.FC<VectorCanvas3DProps> = ({ matrix, vectors, setVectors, scalar, showGrid, gridColor }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   
   // Рефы для стабильного доступа к данным внутри обработчиков событий
   const stateRef = useRef({
     vectors,
     matrix,
+    scalar,
     activeHandleIndex: -1 as number,
     isDragging: false
   });
@@ -31,7 +33,8 @@ const VectorCanvas3D: React.FC<VectorCanvas3DProps> = ({ matrix, vectors, setVec
   useEffect(() => {
     stateRef.current.vectors = vectors;
     stateRef.current.matrix = matrix;
-  }, [vectors, matrix]);
+    stateRef.current.scalar = scalar;
+  }, [vectors, matrix, scalar]);
 
   const sceneObjects = useRef<{
     scene: THREE.Scene;
@@ -136,6 +139,7 @@ const VectorCanvas3D: React.FC<VectorCanvas3DProps> = ({ matrix, vectors, setVec
     const handlePointerMove = (e: PointerEvent) => {
       const s = sceneObjects.current;
       const inv = invMatrixRef.current;
+      const currentScalar = stateRef.current.scalar;
       if (!s || !stateRef.current.isDragging || !inv) return;
 
       const mouse = getMouse(e);
@@ -145,10 +149,11 @@ const VectorCanvas3D: React.FC<VectorCanvas3DProps> = ({ matrix, vectors, setVec
       if (s.raycaster.ray.intersectPlane(s.dragPlane, intersectPoint)) {
         const idx = stateRef.current.activeHandleIndex;
         const pos = intersectPoint;
+        const effectiveScalar = Math.abs(currentScalar) < 1e-6 ? 1e-6 : currentScalar;
 
-        const bx = pos.x * inv[0][0] + pos.y * inv[0][1] + pos.z * inv[0][2];
-        const by = pos.x * inv[1][0] + pos.y * inv[1][1] + pos.z * inv[1][2];
-        const bz = pos.x * inv[2][0] + pos.y * inv[2][1] + pos.z * inv[2][2];
+        const bx = (pos.x * inv[0][0] + pos.y * inv[0][1] + pos.z * inv[0][2]) / effectiveScalar;
+        const by = (pos.x * inv[1][0] + pos.y * inv[1][1] + pos.z * inv[1][2]) / effectiveScalar;
+        const bz = (pos.x * inv[2][0] + pos.y * inv[2][1] + pos.z * inv[2][2]) / effectiveScalar;
 
         setVectors(prev => {
           const next = [...prev];
@@ -252,7 +257,7 @@ const VectorCanvas3D: React.FC<VectorCanvas3DProps> = ({ matrix, vectors, setVec
     s.arrows = newArrows;
   }, [vectors.length, showGrid, gridColor]);
 
-  // 3. Плавное обновление позиций векторов при изменении матрицы
+  // 3. Плавное обновление позиций векторов при изменении матрицы и скаляра
   useEffect(() => {
     const s = sceneObjects.current;
     if (!s) return;
@@ -262,9 +267,9 @@ const VectorCanvas3D: React.FC<VectorCanvas3DProps> = ({ matrix, vectors, setVec
       const a = s.arrows[idx];
       if (!h || !a) return;
 
-      const tx = v.x * matrix[0][0] + v.y * matrix[0][1] + v.z * matrix[0][2];
-      const ty = v.x * matrix[1][0] + v.y * matrix[1][1] + v.z * matrix[1][2];
-      const tz = v.x * matrix[2][0] + v.y * matrix[2][1] + v.z * matrix[2][2];
+      const tx = (v.x * matrix[0][0] + v.y * matrix[0][1] + v.z * matrix[0][2]) * scalar;
+      const ty = (v.x * matrix[1][0] + v.y * matrix[1][1] + v.z * matrix[1][2]) * scalar;
+      const tz = (v.x * matrix[2][0] + v.y * matrix[2][1] + v.z * matrix[2][2]) * scalar;
 
       h.position.set(tx, ty, tz);
 
@@ -274,7 +279,7 @@ const VectorCanvas3D: React.FC<VectorCanvas3DProps> = ({ matrix, vectors, setVec
       a.setDirection(dir);
       a.setLength(len, 0.4, 0.2);
     });
-  }, [vectors, matrix]);
+  }, [vectors, matrix, scalar]);
 
   return (
     <div className="w-full h-full rounded-xl border border-slate-800 overflow-hidden shadow-2xl relative group bg-slate-950">

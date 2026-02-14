@@ -23,6 +23,7 @@ const App: React.FC = () => {
   const [vectors3D, setVectors3D] = useState<Vector3D[]>(INITIAL_VECTORS_3D);
   
   const [selectedVectorIdx, setSelectedVectorIdx] = useState<number>(0);
+  const [scalar, setScalar] = useState<number>(1.0);
   
   const [showGrid, setShowGrid] = useState<boolean>(true);
   const [showOriginalGrid, setShowOriginalGrid] = useState<boolean>(false);
@@ -45,6 +46,7 @@ const App: React.FC = () => {
         if (data.matrix3D) setMatrix3D(data.matrix3D);
         if (data.vectors3D) setVectors3D(data.vectors3D);
         if (data.selectedVectorIdx !== undefined) setSelectedVectorIdx(data.selectedVectorIdx);
+        if (data.scalar !== undefined) setScalar(data.scalar);
         if (data.showOriginalGrid !== undefined) setShowOriginalGrid(data.showOriginalGrid);
         if (data.gridColor) setGridColor(data.gridColor);
         if (data.originalGridColor) setOriginalGridColor(data.originalGridColor);
@@ -59,7 +61,7 @@ const App: React.FC = () => {
   const handleShare = () => {
     const state = { 
       mode, matrix2D, vectors2D, matrix3D, vectors3D, 
-      selectedVectorIdx, showOriginalGrid, gridColor, originalGridColor,
+      selectedVectorIdx, scalar, showOriginalGrid, gridColor, originalGridColor,
       gridThickness, originalGridThickness
     };
     const hash = btoa(JSON.stringify(state));
@@ -74,6 +76,7 @@ const App: React.FC = () => {
     const matrix = mode === '2D' ? matrix2D : matrix3D;
     const vectors = mode === '2D' ? vectors2D : vectors3D;
     try {
+      // In a real app we might pass the scalar to Gemini too for full context
       const result = await getMatrixInsights(matrix, vectors);
       setInsight(result);
     } catch (err) {
@@ -86,35 +89,35 @@ const App: React.FC = () => {
   const matrixStats = useMemo(() => {
     if (mode === '2D') {
       const [[a, b], [c, d]] = matrix2D;
-      const det = a * d - b * c;
-      const trace = a + d;
-      const normA = Math.sqrt(a*a + b*b + c*c + d*d);
+      const det = (a * d - b * c) * (scalar * scalar);
+      const trace = (a + d) * scalar;
+      const normA = Math.sqrt(a*a + b*b + c*c + d*d) * scalar;
       return { det, trace, norm: normA };
     } else {
       const m = matrix3D.flat();
-      const det = m[0]*(m[4]*m[8]-m[5]*m[7]) - m[1]*(m[3]*m[8]-m[5]*m[6]) + m[2]*(m[3]*m[7]-m[4]*m[6]);
-      const trace = matrix3D[0][0] + matrix3D[1][1] + matrix3D[2][2];
-      const norm = Math.sqrt(m.reduce((acc, v) => acc + v*v, 0));
+      const det = (m[0]*(m[4]*m[8]-m[5]*m[7]) - m[1]*(m[3]*m[8]-m[5]*m[6]) + m[2]*(m[3]*m[7]-m[4]*m[6])) * (scalar * scalar * scalar);
+      const trace = (matrix3D[0][0] + matrix3D[1][1] + matrix3D[2][2]) * scalar;
+      const norm = Math.sqrt(m.reduce((acc, v) => acc + v*v, 0)) * scalar;
       return { det, trace, norm };
     }
-  }, [matrix2D, matrix3D, mode]);
+  }, [matrix2D, matrix3D, mode, scalar]);
 
   const transformationMainFormula = useMemo(() => {
     if (mode === '2D') {
       const [[a, b], [c, d]] = matrix2D;
       const v = vectors2D[selectedVectorIdx] || vectors2D[0] || { x: 0, y: 0 };
-      const rx = a * v.x + b * v.y;
-      const ry = c * v.x + d * v.y;
-      return `\\begin{pmatrix} ${a.toFixed(1)} & ${b.toFixed(1)} \\\\ ${c.toFixed(1)} & ${d.toFixed(1)} \\end{pmatrix} \\begin{pmatrix} ${v.x.toFixed(1)} \\\\ ${v.y.toFixed(1)} \\end{pmatrix} = \\begin{pmatrix} ${rx.toFixed(1)} \\\\ ${ry.toFixed(1)} \\end{pmatrix}`;
+      const rx = (a * v.x + b * v.y) * scalar;
+      const ry = (c * v.x + d * v.y) * scalar;
+      return `${scalar.toFixed(1)} \\cdot \\begin{pmatrix} ${a.toFixed(1)} & ${b.toFixed(1)} \\\\ ${c.toFixed(1)} & ${d.toFixed(1)} \\end{pmatrix} \\begin{pmatrix} ${v.x.toFixed(1)} \\\\ ${v.y.toFixed(1)} \\end{pmatrix} = \\begin{pmatrix} ${rx.toFixed(1)} \\\\ ${ry.toFixed(1)} \\end{pmatrix}`;
     } else {
       const m = matrix3D;
       const v = vectors3D[selectedVectorIdx] || vectors3D[0] || { x: 1, y: 0, z: 0 };
-      const rx = m[0][0] * v.x + m[0][1] * v.y + m[0][2] * v.z;
-      const ry = m[1][0] * v.x + m[1][1] * v.y + m[1][2] * v.z;
-      const rz = m[2][0] * v.x + m[2][1] * v.y + m[2][2] * v.z;
-      return `\\begin{pmatrix} ${m[0][0].toFixed(1)} & ${m[0][1].toFixed(1)} & ${m[0][2].toFixed(1)} \\\\ ${m[1][0].toFixed(1)} & ${m[1][1].toFixed(1)} & ${m[1][2].toFixed(1)} \\\\ ${m[2][0].toFixed(1)} & ${m[2][1].toFixed(1)} & ${m[2][2].toFixed(1)} \\end{pmatrix} \\begin{pmatrix} ${v.x.toFixed(1)} \\\\ ${v.y.toFixed(1)} \\\\ ${v.z.toFixed(1)} \\end{pmatrix} = \\begin{pmatrix} ${rx.toFixed(1)} \\\\ ${ry.toFixed(1)} \\\\ ${rz.toFixed(1)} \\end{pmatrix}`;
+      const rx = (m[0][0] * v.x + m[0][1] * v.y + m[0][2] * v.z) * scalar;
+      const ry = (m[1][0] * v.x + m[1][1] * v.y + m[1][2] * v.z) * scalar;
+      const rz = (m[2][0] * v.x + m[2][1] * v.y + m[2][2] * v.z) * scalar;
+      return `${scalar.toFixed(1)} \\cdot \\begin{pmatrix} ${m[0][0].toFixed(1)} & ${m[0][1].toFixed(1)} & ${m[0][2].toFixed(1)} \\\\ ${m[1][0].toFixed(1)} & ${m[1][1].toFixed(1)} & ${m[1][2].toFixed(1)} \\\\ ${m[2][0].toFixed(1)} & ${m[2][1].toFixed(1)} & ${m[2][2].toFixed(1)} \\end{pmatrix} \\begin{pmatrix} ${v.x.toFixed(1)} \\\\ ${v.y.toFixed(1)} \\\\ ${v.z.toFixed(1)} \\end{pmatrix} = \\begin{pmatrix} ${rx.toFixed(1)} \\\\ ${ry.toFixed(1)} \\\\ ${rz.toFixed(1)} \\end{pmatrix}`;
     }
-  }, [matrix2D, matrix3D, vectors2D, vectors3D, mode, selectedVectorIdx]);
+  }, [matrix2D, matrix3D, vectors2D, vectors3D, mode, selectedVectorIdx, scalar]);
 
   const handleTranspose = () => {
     if (mode === '2D') {
@@ -165,6 +168,8 @@ const App: React.FC = () => {
             vectors3D={vectors3D} setVectors3D={setVectors3D}
             selectedVectorIdx={selectedVectorIdx}
             setSelectedVectorIdx={setSelectedVectorIdx}
+            scalar={scalar}
+            setScalar={setScalar}
             showGrid={showGrid} setShowGrid={setShowGrid}
             showOriginalGrid={showOriginalGrid} setShowOriginalGrid={setShowOriginalGrid}
             gridColor={gridColor} setGridColor={setGridColor}
@@ -178,6 +183,7 @@ const App: React.FC = () => {
               setVectors2D([...INITIAL_VECTORS_2D]); 
               setVectors3D([...INITIAL_VECTORS_3D]);
               setSelectedVectorIdx(0);
+              setScalar(1.0);
               setInsight(null); 
               setShowOriginalGrid(false);
               setGridColor('#1e293b');
@@ -218,6 +224,7 @@ const App: React.FC = () => {
                 matrix={matrix2D} 
                 vectors={vectors2D} 
                 setVectors={setVectors2D} 
+                scalar={scalar}
                 showGrid={showGrid} 
                 showOriginalGrid={showOriginalGrid} 
                 gridColor={gridColor} 
@@ -230,6 +237,7 @@ const App: React.FC = () => {
                 matrix={matrix3D} 
                 vectors={vectors3D} 
                 setVectors={setVectors3D} 
+                scalar={scalar}
                 showGrid={showGrid} 
                 gridColor={gridColor} 
               />

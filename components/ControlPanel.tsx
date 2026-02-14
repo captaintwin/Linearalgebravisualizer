@@ -12,6 +12,8 @@ interface ControlPanelProps {
   vectors3D: Vector3D[]; setVectors3D: (vecs: Vector3D[]) => void;
   selectedVectorIdx: number;
   setSelectedVectorIdx: (idx: number) => void;
+  scalar: number;
+  setScalar: (s: number) => void;
   showGrid: boolean; setShowGrid: (b: boolean) => void;
   showOriginalGrid: boolean; setShowOriginalGrid: (b: boolean) => void;
   gridColor: string; setGridColor: (c: string) => void;
@@ -27,7 +29,7 @@ interface ControlPanelProps {
 
 const ControlPanel: React.FC<ControlPanelProps> = (props) => {
   const [activeTab, setActiveTab] = useState<Exclude<ControlTab, 'operations'>>('transform');
-  const [expanded, setExpanded] = useState({ matrix: true, vectors: true, presets: true });
+  const [expanded, setExpanded] = useState({ matrix: true, scalar: true, vectors: true, presets: true });
 
   const toggleSection = (section: keyof typeof expanded) => {
     setExpanded(prev => ({ ...prev, [section]: !prev[section] }));
@@ -66,16 +68,16 @@ const ControlPanel: React.FC<ControlPanelProps> = (props) => {
       const [[a, b], [c, d]] = props.matrix2D;
       const vx = (v as Vector2D).x;
       const vy = (v as Vector2D).y;
-      const wx = a * vx + b * vy;
-      const wy = c * vx + d * vy;
-      return `\\begin{pmatrix} ${a.toFixed(1)} & ${b.toFixed(1)} \\\\ ${c.toFixed(1)} & ${d.toFixed(1)} \\end{pmatrix} \\begin{pmatrix} ${vx.toFixed(1)} \\\\ ${vy.toFixed(1)} \\end{pmatrix} = \\begin{pmatrix} ${wx.toFixed(1)} \\\\ ${wy.toFixed(1)} \\end{pmatrix}`;
+      const wx = (a * vx + b * vy) * props.scalar;
+      const wy = (c * vx + d * vy) * props.scalar;
+      return `${props.scalar.toFixed(1)} \\cdot A \\vec{v} = \\begin{pmatrix} ${wx.toFixed(1)} \\\\ ${wy.toFixed(1)} \\end{pmatrix}`;
     } else {
       const m = props.matrix3D;
       const v3 = v as Vector3D;
-      const wx = m[0][0] * v3.x + m[0][1] * v3.y + m[0][2] * v3.z;
-      const wy = m[1][0] * v3.x + m[1][1] * v3.y + m[1][2] * v3.z;
-      const wz = m[2][0] * v3.x + m[2][1] * v3.y + m[2][2] * v3.z;
-      return `\\vec{w} = \\begin{pmatrix} ${wx.toFixed(1)} \\\\ ${wy.toFixed(1)} \\\\ ${wz.toFixed(1)} \\end{pmatrix}`;
+      const wx = (m[0][0] * v3.x + m[0][1] * v3.y + m[0][2] * v3.z) * props.scalar;
+      const wy = (m[1][0] * v3.x + m[1][1] * v3.y + m[1][2] * v3.z) * props.scalar;
+      const wz = (m[2][0] * v3.x + m[2][1] * v3.y + m[2][2] * v3.z) * props.scalar;
+      return `${props.scalar.toFixed(1)} \\cdot A \\vec{v} = \\begin{pmatrix} ${wx.toFixed(1)} \\\\ ${wy.toFixed(1)} \\\\ ${wz.toFixed(1)} \\end{pmatrix}`;
     }
   };
 
@@ -134,6 +136,41 @@ const ControlPanel: React.FC<ControlPanelProps> = (props) => {
                       );
                     })
                   )}
+                </div>
+              )}
+            </section>
+
+            {/* Scalar Section */}
+            <section className="space-y-4">
+              <div 
+                className="flex justify-between items-center cursor-pointer group"
+                onClick={() => toggleSection('scalar')}
+              >
+                <div className="flex items-center gap-2">
+                  <span className={`text-amber-500 transition-transform ${expanded.scalar ? 'rotate-0' : '-rotate-90'}`}>▼</span>
+                  <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-widest group-hover:text-slate-300">Scalar Multiplier ($k$)</h3>
+                </div>
+                <div className="flex gap-2" onClick={e => e.stopPropagation()}>
+                  <button onClick={() => props.setScalar(1.0)} className="p-2 bg-slate-800 rounded text-[9px] font-bold hover:bg-slate-700 transition-colors" title="Reset Scalar">↺</button>
+                </div>
+              </div>
+
+              {expanded.scalar && (
+                <div className="bg-slate-950/50 p-6 rounded-2xl border border-slate-800 shadow-inner space-y-3 animate-in fade-in slide-in-from-top-2 duration-300">
+                  <div className="flex justify-between items-center">
+                    <span className="text-[10px] font-mono text-slate-500">$k = $</span>
+                    <span className="text-amber-400 font-bold">{props.scalar.toFixed(1)}</span>
+                  </div>
+                  <input 
+                    type="range" 
+                    min="-4" max="4" step="0.1" 
+                    value={props.scalar}
+                    onChange={(e) => props.setScalar(parseFloat(e.target.value))}
+                    className="w-full accent-amber-500 h-1.5 opacity-70 hover:opacity-100 transition-opacity"
+                  />
+                  <div className="flex justify-between text-[8px] text-slate-600 font-bold">
+                    <span>Negative</span><span>Neutral (1.0)</span><span>Positive</span>
+                  </div>
                 </div>
               )}
             </section>
