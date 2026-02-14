@@ -68,24 +68,17 @@ const VectorCanvas3D: React.FC<VectorCanvas3DProps> = ({
   const invMatrixRef = useRef<Matrix3x3 | null>(null);
   useEffect(() => { invMatrixRef.current = inverseMatrix; }, [inverseMatrix]);
 
-  // Cubic root solver for eigenvalues calculation
   const get3DEigenvalues = (m: number[]): number[] => {
     const [a11, a12, a13, a21, a22, a23, a31, a32, a33] = m;
-    // Char poly: -L^3 + trace*L^2 - sum_minors*L + det = 0
     const trace = a11 + a22 + a33;
     const sumMinors = (a11*a22 - a12*a21) + (a11*a33 - a13*a31) + (a22*a33 - a23*a32);
     const det = a11*(a22*a33 - a23*a32) - a12*(a21*a33 - a23*a31) + a13*(a21*a32 - a22*a31);
 
-    // Using a simplified iterative root finding or Cardano's method
-    // For visualization purposes, we sample a few common ones or provide a numerical approximation
-    // Let's implement a small sampling-based root search for real roots
     const realRoots: number[] = [];
     const poly = (l: number) => -Math.pow(l, 3) + trace*Math.pow(l, 2) - sumMinors*l + det;
     
-    // Sampling from -10 to 10 to find root intervals
-    for (let l = -10; l <= 10; l += 0.5) {
+    for (let l = -20; l <= 20; l += 0.5) {
       if (poly(l) * poly(l + 0.5) <= 0) {
-        // Root found in interval, refine with binary search
         let low = l, high = l + 0.5;
         for (let i = 0; i < 10; i++) {
           let mid = (low + high) / 2;
@@ -103,8 +96,6 @@ const VectorCanvas3D: React.FC<VectorCanvas3DProps> = ({
 
   const get3DEigenvector = (m: number[], lambda: number): THREE.Vector3 => {
     const [a11, a12, a13, a21, a22, a23, a31, a32, a33] = m;
-    // Solve (A - lambda*I)v = 0
-    // We can use cross products of rows to find a nullspace vector
     const r1 = new THREE.Vector3(a11 - lambda, a12, a13);
     const r2 = new THREE.Vector3(a21, a22 - lambda, a23);
     const r3 = new THREE.Vector3(a31, a32, a33 - lambda);
@@ -112,7 +103,7 @@ const VectorCanvas3D: React.FC<VectorCanvas3DProps> = ({
     let v = new THREE.Vector3().crossVectors(r1, r2);
     if (v.length() < 1e-3) v = new THREE.Vector3().crossVectors(r1, r3);
     if (v.length() < 1e-3) v = new THREE.Vector3().crossVectors(r2, r3);
-    if (v.length() < 1e-3) return new THREE.Vector3(1, 0, 0); // fallback
+    if (v.length() < 1e-3) return new THREE.Vector3(1, 0, 0); 
 
     return v.normalize();
   };
@@ -176,9 +167,6 @@ const VectorCanvas3D: React.FC<VectorCanvas3DProps> = ({
           s.dragPlane.setFromNormalAndCoplanarPoint(normal, hit.object.position);
           renderer.domElement.setPointerCapture(e.pointerId);
           hit.object.scale.set(1.5, 1.5, 1.5);
-          if ((hit.object as THREE.Mesh).material instanceof THREE.MeshStandardMaterial) {
-            ((hit.object as THREE.Mesh).material as THREE.MeshStandardMaterial).opacity = 1;
-          }
         }
       }
     };
@@ -213,9 +201,6 @@ const VectorCanvas3D: React.FC<VectorCanvas3DProps> = ({
         const idx = stateRef.current.activeHandleIndex;
         if (s.handles[idx]) {
           s.handles[idx].scale.set(1, 1, 1);
-          if (s.handles[idx].material instanceof THREE.MeshStandardMaterial) {
-             (s.handles[idx].material as THREE.MeshStandardMaterial).opacity = 0.4;
-          }
         }
         renderer.domElement.releasePointerCapture(e.pointerId);
       }
@@ -236,16 +221,7 @@ const VectorCanvas3D: React.FC<VectorCanvas3DProps> = ({
     };
     animate();
 
-    const resize = () => {
-      if (!containerRef.current) return;
-      camera.aspect = containerRef.current.clientWidth / containerRef.current.clientHeight;
-      camera.updateProjectionMatrix();
-      renderer.setSize(containerRef.current.clientWidth, containerRef.current.clientHeight);
-    };
-    window.addEventListener('resize', resize);
-
     return () => {
-      window.removeEventListener('resize', resize);
       renderer.domElement.removeEventListener('pointerdown', handlePointerDown);
       renderer.domElement.removeEventListener('pointermove', handlePointerMove);
       renderer.domElement.removeEventListener('pointerup', handlePointerUp);
@@ -302,30 +278,22 @@ const VectorCanvas3D: React.FC<VectorCanvas3DProps> = ({
       s.originalGrid = createLineGrid(null, originalGridColor, originalGridThickness, 0.2);
       s.scene.add(s.originalGrid);
     }
-
     if (showGrid) {
       s.grid = createLineGrid(matrix, gridColor, gridThickness, 0.5);
       s.scene.add(s.grid);
     }
 
-    // Rendering Eigenvectors in 3D
     if (showEigenvectors) {
       const eigenGroup = new THREE.Group();
-      const flatM = matrix.flat();
+      const flatM = matrix.flat().map(v => v * scalar);
       const eigenvalues = get3DEigenvalues(flatM);
-      const colors = [0xfbbf24, 0xfb7185, 0x2dd4bf]; // Amber, Rose, Teal
+      const colors = [0xfbbf24, 0xfb7185, 0x2dd4bf];
 
       eigenvalues.forEach((lambda, i) => {
         const v = get3DEigenvector(flatM, lambda);
         const points = [v.clone().multiplyScalar(-extent), v.clone().multiplyScalar(extent)];
         const geom = new THREE.BufferGeometry().setFromPoints(points);
-        const material = new THREE.LineDashedMaterial({ 
-          color: colors[i % colors.length], 
-          dashSize: 0.5, 
-          gapSize: 0.2,
-          transparent: true,
-          opacity: 0.8
-        });
+        const material = new THREE.LineDashedMaterial({ color: colors[i % 3], dashSize: 0.5, gapSize: 0.2, transparent: true, opacity: 0.8 });
         const line = new THREE.Line(geom, material);
         line.computeLineDistances();
         eigenGroup.add(line);

@@ -1,7 +1,6 @@
 
 // App.tsx
 import React, { useState, useMemo, useEffect } from 'react';
-// Added THREE import to fix "Cannot find name 'THREE'" errors in eigenvalue calculations.
 import * as THREE from 'three';
 import VectorCanvas from './components/VectorCanvas';
 import VectorCanvas3D from './components/VectorCanvas3D';
@@ -26,7 +25,6 @@ const App: React.FC = () => {
   
   const [showGrid, setShowGrid] = useState<boolean>(true);
   const [showOriginalGrid, setShowOriginalGrid] = useState<boolean>(true);
-  // Default showEigenvectors to true as requested
   const [showEigenvectors, setShowEigenvectors] = useState<boolean>(true);
   
   const [gridColor, setGridColor] = useState<string>('#6366f1');
@@ -101,7 +99,6 @@ const App: React.FC = () => {
       
       const charEq = `-\\lambda^3 + ${trace.toFixed(2)}\\lambda^2 - ${sumMinors.toFixed(2)}\\lambda + ${det.toFixed(2)} = 0`;
 
-      // Simple root finder for common 3D cases (real roots only)
       const findRoots = () => {
         const roots: number[] = [];
         const f = (l: number) => -Math.pow(l, 3) + trace*Math.pow(l, 2) - sumMinors*l + det;
@@ -122,7 +119,6 @@ const App: React.FC = () => {
       const roots = findRoots();
       const colors = ['#fbbf24', '#fb7185', '#2dd4bf'];
       const eigenvalues = roots.map((r, i) => {
-        // Fix for "Cannot find name 'THREE'" by using the imported THREE namespace.
         const v1 = new THREE.Vector3(a11 - r, a12, a13);
         const v2 = new THREE.Vector3(a21, a22 - r, a23);
         const v3 = new THREE.Vector3(a31, a32, a33 - r);
@@ -221,7 +217,6 @@ const App: React.FC = () => {
               setSelectedVectorIdx(0);
               setScalar(1.0);
               setShowOriginalGrid(true);
-              // Reset showEigenvectors back to true
               setShowEigenvectors(true);
               setGridColor('#6366f1');
               setOriginalGridColor('#ffffff');
@@ -251,7 +246,6 @@ const App: React.FC = () => {
                 </div>
                 
                 <div className="space-y-4">
-                  {/* Scalar Stats */}
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-1">
                       <span className="text-[9px] text-slate-500 font-bold uppercase">Det(A)</span>
@@ -267,7 +261,6 @@ const App: React.FC = () => {
                     </div>
                   </div>
 
-                  {/* Characteristic Equation */}
                   <div className="pt-2 border-t border-slate-800">
                     <span className="text-[9px] text-slate-500 font-black uppercase tracking-widest block mb-2">Char Equation $P(\lambda)$</span>
                     <div className="bg-slate-950/50 p-2 rounded border border-slate-800 overflow-x-auto">
@@ -275,7 +268,6 @@ const App: React.FC = () => {
                     </div>
                   </div>
 
-                  {/* Eigenvalues & Eigenvectors */}
                   {matrixStats.eigenvalues && matrixStats.eigenvalues.length > 0 ? (
                     <div className="pt-2 border-t border-slate-800 space-y-3">
                       <span className="text-[9px] text-slate-500 font-black uppercase tracking-widest block">Eigen Spaces</span>
