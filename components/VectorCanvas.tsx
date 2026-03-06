@@ -79,8 +79,19 @@ const VectorCanvas: React.FC<VectorCanvasProps> = ({
     const margin = 40;
     const extent = 10; // Slightly larger view for eigenvectors
 
-    const xScale = d3.scaleLinear().domain([-extent, extent]).range([margin, width - margin]);
-    const yScale = d3.scaleLinear().domain([-extent, extent]).range([height - margin, margin]);
+    // Square aspect: same pixels per unit on both axes so grid is not stretched
+    const availableWidth = width - 2 * margin;
+    const availableHeight = height - 2 * margin;
+    const plotSize = Math.min(availableWidth, availableHeight);
+    const offsetX = (availableWidth - plotSize) / 2;
+    const offsetY = (availableHeight - plotSize) / 2;
+
+    const xScale = d3.scaleLinear()
+      .domain([-extent, extent])
+      .range([margin + offsetX, margin + offsetX + plotSize]);
+    const yScale = d3.scaleLinear()
+      .domain([-extent, extent])
+      .range([margin + offsetY + plotSize, margin + offsetY]);
 
     svg.selectAll('*').remove();
     const g = svg.append('g');
