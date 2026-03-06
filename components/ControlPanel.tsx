@@ -1,13 +1,17 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { Matrix2x2, Matrix3x3, Vector2D, Vector3D, DimensionMode, ControlTab, SvdStages } from '../types';
-import { PRESET_TRANSFORMATIONS_2D, PRESET_TRANSFORMATIONS_3D } from '../constants';
+import { PRESET_TRANSFORMATIONS_2D, PRESET_TRANSFORMATIONS_3D, ANIMATION_PRESETS_2D, ANIMATION_PRESETS_3D } from '../constants';
+import type { AnimationPreset2D, AnimationPreset3D } from '../constants';
 import MathFormula from './MathFormula';
 import type { Svd2DResult } from '../utils/svd2d';
 import { svdEffectiveMatrix } from '../utils/svd2d';
 
 interface ControlPanelProps {
   mode: DimensionMode;
+  isAnimating?: boolean;
+  animationSpeed: number;
+  setAnimationSpeed: (v: number) => void;
   activeTab: Exclude<ControlTab, 'operations'>; setActiveTab: (t: Exclude<ControlTab, 'operations'>) => void;
   svdStages: SvdStages; setSvdStages: (s: SvdStages) => void;
   svdResult2D: Svd2DResult | null;
@@ -34,6 +38,8 @@ interface ControlPanelProps {
   onResetAll: () => void;
   onTranspose: () => void;
   onShare: () => void;
+  onStartAnimation: (preset: AnimationPreset2D | AnimationPreset3D) => void;
+  onStopAnimation: () => void;
 }
 
 const DEG2RAD = Math.PI / 180;
@@ -76,24 +82,25 @@ function SvdFormulaBlock({ svdResult, stages }: { svdResult: Svd2DResult; stages
   return (
     <div className="rounded-2xl border border-slate-800 bg-slate-950/50 p-4">
       <div className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">Current transform</div>
-      <MathFormula formula={formula} className="text-[10px] text-indigo-200 font-mono block overflow-x-auto" displayMode />
+      <MathFormula formula={formula} className="text-[10px] text-indigo-200 font-mono block overflow-x-hidden" displayMode />
     </div>
   );
 }
 
 const ControlPanel: React.FC<ControlPanelProps> = (props) => {
   const { activeTab, setActiveTab, svdStages, setSvdStages, svdResult2D, showSvdEllipse, setShowSvdEllipse, svdEllipseScale, setSvdEllipseScale, svdEllipseColor, setSvdEllipseColor } = props;
-  const [expanded, setExpanded] = useState({ matrix: true, scalar: true, vectors: true, presets: true, rotation: true, svd: true });
+  const [expanded, setExpanded] = useState({ matrix: true, scalar: true, vectors: true, presets: true, animations: true, rotation: true, svd: true });
   const [rotationAngleDeg, setRotationAngleDeg] = useState(45);
   const [rotationAxis3D, setRotationAxis3D] = useState<'X' | 'Y' | 'Z'>('Z');
 
   useEffect(() => {
+    if (props.isAnimating) return;
     if (props.mode === '2D') {
       props.setMatrix2D(rotation2D(rotationAngleDeg));
     } else {
       props.setMatrix3D(rotation3D(rotationAxis3D, rotationAngleDeg));
     }
-  }, [props.mode, rotationAngleDeg, rotationAxis3D]);
+  }, [props.mode, props.isAnimating, rotationAngleDeg, rotationAxis3D]);
 
   const toggleSection = (section: keyof typeof expanded) => {
     setExpanded(prev => ({ ...prev, [section]: !prev[section] }));
@@ -159,7 +166,7 @@ const ControlPanel: React.FC<ControlPanelProps> = (props) => {
         ))}
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4 lg:p-6 space-y-6 custom-scrollbar">
+      <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 lg:p-6 space-y-6 custom-scrollbar scrollbar-hide">
         {activeTab === 'transform' && (
           <>
             {/* Matrix Section */}
@@ -395,70 +402,134 @@ const ControlPanel: React.FC<ControlPanelProps> = (props) => {
                         <span className="text-[11px] font-bold text-slate-300 group-hover:text-white">Show on canvas</span>
                       </label>
                       <div className="space-y-2">
-                        <div className="flex justify-between items-center">
-                          <span className="text-[10px] text-slate-400 font-bold uppercase">Ellipse scale</span>
-                          <span className="text-[10px] font-mono text-orange-400 font-bold">{svdEllipseScale.toFixed(1)}×</span>
+                          <div className="flex items-center justify-between gap-2 flex-wrap">
+                            <h4 className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Stages</h4>
+                            <div className="flex gap-2">
+                              <button
+                                type="button"
+                                onClick={() => setSvdStages({ vT: false, sigma: false, u: false })}
+                                className="text-[9px] font-bold uppercase tracking-wider px-2.5 py-1.5 rounded-lg border border-slate-600 text-slate-400 hover:text-slate-200 hover:border-slate-500 hover:bg-slate-800/50 transition-colors"
+                              >
+                                Clear all
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setSvdStages({ vT: true, sigma: true, u: true })}
+                                className="text-[9px] font-bold uppercase tracking-wider px-2.5 py-1.5 rounded-lg border border-indigo-500/50 text-indigo-400 hover:text-indigo-300 hover:bg-indigo-500/10 transition-colors"
+                              >
+                                All stages
+                              </button>
+                            </div>
+                          </div>
+                          <div className="flex flex-wrap gap-4">
+                            {[
+                              { key: 'vT' as const, label: 'Vᵀ' },
+                              { key: 'sigma' as const, label: 'Σ' },
+                              { key: 'u' as const, label: 'U' },
+                            ].map(({ key, label }) => (
+                              <label key={key} className="flex items-center gap-2 cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={svdStages[key]}
+                                  onChange={(e) => setSvdStages((s) => ({ ...s, [key]: e.target.checked }))}
+                                  className="w-4 h-4 accent-indigo-600"
+                                />
+                                <span className="text-[11px] font-bold text-slate-300">{label}</span>
+                              </label>
+                            ))}
+                          </div>
                         </div>
-                        <input
-                          type="range"
-                          min="0.5"
-                          max="5"
-                          step="0.1"
-                          value={svdEllipseScale}
-                          onChange={(e) => setSvdEllipseScale(parseFloat(e.target.value))}
-                          className="w-full accent-orange-500 h-1.5 opacity-70 hover:opacity-100 transition-opacity"
-                        />
-                      </div>
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-[10px] text-slate-400 font-bold uppercase">Ellipse color</span>
-                        <input
-                          type="color"
-                          value={svdEllipseColor}
-                          onChange={(e) => setSvdEllipseColor(e.target.value)}
-                          className="w-8 h-5 bg-transparent border-none cursor-pointer rounded"
-                        />
-                      </div>
-                      <div className="flex items-center justify-between gap-2 flex-wrap">
-                        <h4 className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Stages</h4>
-                        <div className="flex gap-2">
-                          <button
-                            type="button"
-                            onClick={() => setSvdStages({ vT: false, sigma: false, u: false })}
-                            className="text-[9px] font-bold uppercase tracking-wider px-2.5 py-1.5 rounded-lg border border-slate-600 text-slate-400 hover:text-slate-200 hover:border-slate-500 hover:bg-slate-800/50 transition-colors"
-                          >
-                            Clear all
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setSvdStages({ vT: true, sigma: true, u: true })}
-                            className="text-[9px] font-bold uppercase tracking-wider px-2.5 py-1.5 rounded-lg border border-indigo-500/50 text-indigo-400 hover:text-indigo-300 hover:bg-indigo-500/10 transition-colors"
-                          >
-                            All stages
-                          </button>
-                        </div>
-                      </div>
-                      <div className="flex flex-wrap gap-4">
-                        {[
-                          { key: 'vT' as const, label: 'Vᵀ' },
-                          { key: 'sigma' as const, label: 'Σ' },
-                          { key: 'u' as const, label: 'U' },
-                        ].map(({ key, label }) => (
-                          <label key={key} className="flex items-center gap-2 cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={svdStages[key]}
-                              onChange={(e) => setSvdStages((s) => ({ ...s, [key]: e.target.checked }))}
-                              className="w-4 h-4 accent-indigo-600"
-                            />
-                            <span className="text-[11px] font-bold text-slate-300">{label}</span>
-                          </label>
-                        ))}
-                      </div>
                       <SvdFormulaBlock svdResult={svdResult2D} stages={svdStages} />
+                      <div className="pt-4 mt-4 border-t border-slate-800/50 flex items-center justify-between gap-4 flex-wrap">
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] text-slate-400 font-bold uppercase">Color</span>
+                          <input
+                            type="color"
+                            value={svdEllipseColor}
+                            onChange={(e) => setSvdEllipseColor(e.target.value)}
+                            className="w-8 h-5 bg-transparent border-none cursor-pointer rounded"
+                          />
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] text-slate-400 font-bold uppercase">Scale</span>
+                          <span className="text-[10px] font-mono text-orange-400 font-bold">{svdEllipseScale.toFixed(1)}×</span>
+                          <input
+                            type="range"
+                            min="0.5"
+                            max="5"
+                            step="0.1"
+                            value={svdEllipseScale}
+                            onChange={(e) => setSvdEllipseScale(parseFloat(e.target.value))}
+                            className="w-16 accent-orange-500 h-1.5 opacity-70 hover:opacity-100"
+                          />
+                        </div>
+                      </div>
                     </>
                   ) : (
                     <p className="text-slate-400 text-sm">No SVD data.</p>
                   )}
+                </div>
+              )}
+            </section>
+
+            {/* Animation Presets Section */}
+            <section className="space-y-4">
+              <div 
+                className="flex justify-between items-center cursor-pointer group"
+                onClick={() => toggleSection('animations')}
+              >
+                <div className="flex items-center gap-2">
+                  <span className={`text-amber-500 transition-transform ${expanded.animations ? 'rotate-0' : '-rotate-90'}`}>▼</span>
+                  <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-widest group-hover:text-slate-300">Animation Presets</h3>
+                </div>
+              </div>
+
+              {expanded.animations && (
+                <div className="space-y-3 animate-in fade-in slide-in-from-top-2 duration-300">
+                  <div className="space-y-2">
+                    <div className="flex justify-between items-center text-[10px]">
+                      <span className="text-slate-500 font-bold uppercase">Speed</span>
+                      <span className="text-amber-400 font-mono font-bold">{props.animationSpeed.toFixed(2)}×</span>
+                    </div>
+                    <input
+                      type="range"
+                      min={0.25}
+                      max={2}
+                      step={0.05}
+                      value={props.animationSpeed}
+                      onChange={(e) => props.setAnimationSpeed(parseFloat(e.target.value))}
+                      className="w-full accent-amber-500 h-1.5 opacity-80 hover:opacity-100 transition-opacity"
+                    />
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => {
+                        const presets = props.mode === '2D' ? ANIMATION_PRESETS_2D : ANIMATION_PRESETS_3D;
+                        if (presets[0]) props.onStartAnimation(presets[0]);
+                      }}
+                      className="flex-1 py-2 rounded-lg text-[10px] font-black uppercase bg-emerald-600/20 hover:bg-emerald-600/40 text-emerald-400 border border-emerald-500/40 transition-all"
+                    >
+                      ▶ Play
+                    </button>
+                    <button
+                      onClick={props.onStopAnimation}
+                      disabled={!props.isAnimating}
+                      className="flex-1 py-2 rounded-lg text-[10px] font-black uppercase bg-rose-600/20 hover:bg-rose-600/40 text-rose-400 border border-rose-500/40 transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-rose-600/20"
+                    >
+                      ⏹ Stop
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    {(props.mode === '2D' ? ANIMATION_PRESETS_2D : ANIMATION_PRESETS_3D).map(preset => (
+                      <button
+                        key={preset.id}
+                        onClick={() => props.onStartAnimation(preset)}
+                        className="text-[8px] leading-tight bg-amber-500/5 hover:bg-amber-500/20 text-slate-400 hover:text-amber-300 px-2 py-2.5 rounded border border-slate-800 hover:border-amber-500/30 transition-all font-bold text-center"
+                      >
+                        {preset.label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               )}
             </section>
@@ -547,6 +618,8 @@ const ControlPanel: React.FC<ControlPanelProps> = (props) => {
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 10px; }
         .custom-scrollbar-h::-webkit-scrollbar { height: 4px; }
         .custom-scrollbar-h::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
+        .scrollbar-hide::-webkit-scrollbar { display: none !important; }
+        .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none !important; }
       `}</style>
     </div>
   );

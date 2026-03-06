@@ -8,8 +8,11 @@ import ControlPanel from './components/ControlPanel';
 import MathFormula from './components/MathFormula';
 import { 
   INITIAL_MATRIX_2D, INITIAL_VECTORS_2D, 
-  INITIAL_MATRIX_3D, INITIAL_VECTORS_3D 
+  INITIAL_MATRIX_3D, INITIAL_VECTORS_3D,
+  ANIMATION_PRESETS_2D, ANIMATION_PRESETS_3D
 } from './constants';
+import type { AnimationPreset2D, AnimationPreset3D } from './constants';
+import { lerpMatrix2D, lerpMatrix3D } from './utils/animateMatrix';
 import { Matrix2x2, Matrix3x3, Vector2D, Vector3D, DimensionMode, ControlTab, SvdStages } from './types';
 import { svd2d, svdEffectiveMatrix } from './utils/svd2d';
 
@@ -25,6 +28,10 @@ const App: React.FC = () => {
   const [scalar, setScalar] = useState<number>(1.0);
 
   // Tabs (transform | svd | settings) and SVD stage toggles
+  const [isAnimating, setIsAnimating] = useState(false);
+  const [animationSpeed, setAnimationSpeed] = useState(1.0); // 0.25x .. 2x
+  const animationSpeedRef = useRef(animationSpeed);
+  animationSpeedRef.current = animationSpeed;
   const [activeTab, setActiveTab] = useState<Exclude<ControlTab, 'operations'>>('transform');
   const [svdStages, setSvdStages] = useState<SvdStages>({ vT: true, sigma: true, u: true });
   const [showSvdEllipse, setShowSvdEllipse] = useState<boolean>(false);
@@ -50,6 +57,76 @@ const App: React.FC = () => {
   const viewerRef = useRef<HTMLDivElement>(null);
   const kernelRef = useRef<HTMLDivElement>(null);
   const propertiesRef = useRef<HTMLDivElement>(null);
+  const animationRef = useRef<{
+    startTime: number;
+    startMatrix2D: Matrix2x2;
+    startMatrix3D: Matrix3x3;
+    preset2D?: AnimationPreset2D;
+    preset3D?: AnimationPreset3D;
+    mode: DimensionMode;
+  } | null>(null);
+
+  const startAnimation = useCallback((preset: AnimationPreset2D | AnimationPreset3D) => {
+    setIsAnimating(true);
+    if (mode === '2D' && preset.targetMatrix.length === 2) {
+      const p = preset as AnimationPreset2D;
+      animationRef.current = {
+        startTime: performance.now(),
+        startMatrix2D: matrix2D.map(r => [...r]) as Matrix2x2,
+        startMatrix3D: matrix3D.map(r => [...r]) as Matrix3x3,
+        preset2D: p,
+        mode: '2D'
+      };
+    } else if (mode === '3D' && preset.targetMatrix.length === 3) {
+      const p = preset as AnimationPreset3D;
+      animationRef.current = {
+        startTime: performance.now(),
+        startMatrix2D: matrix2D.map(r => [...r]) as Matrix2x2,
+        startMatrix3D: matrix3D.map(r => [...r]) as Matrix3x3,
+        preset3D: p,
+        mode: '3D'
+      };
+    }
+  }, [mode, matrix2D, matrix3D]);
+
+  const stopAnimation = useCallback(() => {
+    animationRef.current = null;
+    setIsAnimating(false);
+  }, []);
+
+  useEffect(() => {
+    let rafId: number;
+    const loop = () => {
+      const anim = animationRef.current;
+      if (anim) {
+        const preset = anim.mode === '2D' ? anim.preset2D : anim.preset3D;
+        if (preset) {
+          const totalDuration = preset.loop ? preset.duration * 2 : preset.duration; // there + back
+          const elapsed = performance.now() - anim.startTime;
+          const effectiveElapsed = elapsed * animationSpeedRef.current;
+          const cycleElapsed = effectiveElapsed % totalDuration; // ping-pong: there then back
+          const isBackPhase = preset.loop && cycleElapsed >= preset.duration;
+          const t = preset.loop
+            ? (isBackPhase
+                ? (cycleElapsed - preset.duration) / preset.duration  // 0→1 back: B → A
+                : cycleElapsed / preset.duration)                        // 0→1 there: A → B
+            : Math.min(1, cycleElapsed / preset.duration);
+          if (anim.mode === '2D' && anim.preset2D) {
+            const start = isBackPhase ? anim.preset2D.targetMatrix : anim.startMatrix2D;
+            const target = isBackPhase ? anim.startMatrix2D : anim.preset2D.targetMatrix;
+            setMatrix2D(lerpMatrix2D(start, target, t));
+          } else if (anim.mode === '3D' && anim.preset3D) {
+            const start = isBackPhase ? anim.preset3D.targetMatrix : anim.startMatrix3D;
+            const target = isBackPhase ? anim.startMatrix3D : anim.preset3D.targetMatrix;
+            setMatrix3D(lerpMatrix3D(start, target, t));
+          }
+        }
+      }
+      rafId = requestAnimationFrame(loop);
+    };
+    rafId = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(rafId);
+  }, []);
 
   useEffect(() => {
     if (propertiesInitialPlacementDone.current) return;
@@ -445,6 +522,9 @@ const App: React.FC = () => {
         <aside className="flex-1 lg:w-96 bg-slate-900/40 border-t lg:border-t-0 lg:border-r border-slate-800 overflow-hidden order-2 lg:order-1 flex flex-col">
           <ControlPanel 
             mode={mode}
+            isAnimating={isAnimating}
+            animationSpeed={animationSpeed}
+            setAnimationSpeed={setAnimationSpeed}
             activeTab={activeTab} setActiveTab={setActiveTab}
             svdStages={svdStages} setSvdStages={setSvdStages}
             svdResult2D={svdResult2D}
@@ -485,10 +565,12 @@ const App: React.FC = () => {
             }}
             onTranspose={handleTranspose}
             onShare={handleShare}
+            onStartAnimation={startAnimation}
+            onStopAnimation={stopAnimation}
           />
         </aside>
 
-        <div className="flex-[1.5] lg:flex-1 p-4 lg:p-8 flex flex-col gap-8 overflow-y-auto order-1 lg:order-2 bg-slate-950 relative z-10 custom-scrollbar">
+        <div className="flex-[1.5] lg:flex-1 p-4 lg:p-8 flex flex-col gap-8 overflow-hidden order-1 lg:order-2 bg-slate-950 relative z-10 custom-scrollbar">
           <div ref={viewerRef} className="h-64 sm:h-[400px] lg:flex-1 relative group shrink-0 rounded-2xl overflow-hidden border border-slate-800/50 shadow-2xl">
             
             {/* Overlay Formula (Kernel) - draggable */}

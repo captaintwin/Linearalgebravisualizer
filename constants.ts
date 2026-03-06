@@ -1,4 +1,3 @@
-
 import { Matrix2x2, Matrix3x3, Vector2D, Vector3D } from './types';
 
 export const INITIAL_MATRIX_2D: Matrix2x2 = [[1, 0], [0, 1]];
@@ -63,3 +62,42 @@ export const PRESET_TRANSFORMATIONS_3D: Record<string, Matrix3x3> = {
   '3D Shear (XY)': [[1, 0, 1], [0, 1, 0], [0, 0, 1]],
   'Zero Space': [[0, 0, 0], [0, 0, 0], [0, 0, 0]]
 };
+
+/** Animation preset: Identity → target matrix over duration (ms). loop = animate there and back. */
+export interface AnimationPreset2D {
+  id: string;
+  label: string;
+  targetMatrix: Matrix2x2;
+  duration: number;
+  loop?: boolean;
+}
+
+export interface AnimationPreset3D {
+  id: string;
+  label: string;
+  targetMatrix: Matrix3x3;
+  duration: number;
+  loop?: boolean;
+}
+
+/** Standard linear algebra illustrations — click to animate (all loop: there and back) */
+export const ANIMATION_PRESETS_2D: AnimationPreset2D[] = [
+  { id: 'rotate', label: '↻ Rotate 90°', targetMatrix: [[0, -1], [1, 0]], duration: 1200, loop: true },
+  { id: 'rotate360', label: '↻ Full spin', targetMatrix: [[-1, 0], [0, -1]], duration: 2000, loop: true },
+  { id: 'scale', label: '⊕ Scale 2×', targetMatrix: [[2, 0], [0, 2]], duration: 1000, loop: true },
+  { id: 'shear', label: '▸ Shear', targetMatrix: [[1, 1], [0, 1]], duration: 1200, loop: true },
+  { id: 'reflect', label: '⇄ Reflect y=x', targetMatrix: [[0, 1], [1, 0]], duration: 1000, loop: true },
+  { id: 'project', label: '▬ Project X', targetMatrix: [[1, 0], [0, 0]], duration: 1200, loop: true },
+  { id: 'squeeze', label: '⊡ Squeeze', targetMatrix: [[2, 0], [0, 0.5]], duration: 1200, loop: true },
+  { id: 'permute', label: '⇆ Swap axes', targetMatrix: [[0, 1], [1, 0]], duration: 800, loop: true },
+  { id: 'svd-style', label: '◐ SVD ellipse', targetMatrix: [[1.5, 0.5], [0.5, 1.5]], duration: 1800, loop: true }
+];
+
+export const ANIMATION_PRESETS_3D: AnimationPreset3D[] = [
+  { id: 'rotateX', label: '↻ Rotate X', targetMatrix: [[1, 0, 0], [0, 0, -1], [0, 1, 0]], duration: 1500, loop: true },
+  { id: 'rotateY', label: '↻ Rotate Y', targetMatrix: [[0, 0, 1], [0, 1, 0], [-1, 0, 0]], duration: 1500, loop: true },
+  { id: 'rotateZ', label: '↻ Rotate Z', targetMatrix: [[0, -1, 0], [1, 0, 0], [0, 0, 1]], duration: 1500, loop: true },
+  { id: 'scale3d', label: '⊕ Scale 2×', targetMatrix: [[2, 0, 0], [0, 2, 0], [0, 0, 2]], duration: 1000, loop: true },
+  { id: 'projectXY', label: '▬ Project XY', targetMatrix: [[1, 0, 0], [0, 1, 0], [0, 0, 0]], duration: 1200, loop: true },
+  { id: 'reflectZ', label: '⇄ Reflect Z', targetMatrix: [[1, 0, 0], [0, 1, 0], [0, 0, -1]], duration: 1000, loop: true }
+];
