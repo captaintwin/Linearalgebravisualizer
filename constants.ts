@@ -70,6 +70,8 @@ export interface AnimationPreset2D {
   targetMatrix: Matrix2x2;
   duration: number;
   loop?: boolean;
+  /** When set, animate by interpolating angle (like Rotation block) — no matrix lerp, preserves orthogonality */
+  rotationTargetDeg?: number;
 }
 
 export interface AnimationPreset3D {
@@ -78,12 +80,14 @@ export interface AnimationPreset3D {
   targetMatrix: Matrix3x3;
   duration: number;
   loop?: boolean;
+  /** When set with rotationAxis, animate by interpolating angle — no matrix lerp */
+  rotationTargetDeg?: number;
+  rotationAxis?: 'X' | 'Y' | 'Z';
 }
 
-/** Standard linear algebra illustrations — click to animate (all loop: there and back) */
+/** Standard linear algebra illustrations — click to animate (all loop: there and back). Rotation always 360°. */
 export const ANIMATION_PRESETS_2D: AnimationPreset2D[] = [
-  { id: 'rotate', label: '↻ Rotate 90°', targetMatrix: [[0, -1], [1, 0]], duration: 1200, loop: true },
-  { id: 'rotate360', label: '↻ Full spin', targetMatrix: [[-1, 0], [0, -1]], duration: 2000, loop: true },
+  { id: 'rotate', label: '↻ Rotate 360°', targetMatrix: [[1, 0], [0, 1]], duration: 2000, loop: true, rotationTargetDeg: 360 },
   { id: 'scale', label: '⊕ Scale 2×', targetMatrix: [[2, 0], [0, 2]], duration: 1000, loop: true },
   { id: 'shear', label: '▸ Shear', targetMatrix: [[1, 1], [0, 1]], duration: 1200, loop: true },
   { id: 'reflect', label: '⇄ Reflect y=x', targetMatrix: [[0, 1], [1, 0]], duration: 1000, loop: true },
@@ -94,9 +98,9 @@ export const ANIMATION_PRESETS_2D: AnimationPreset2D[] = [
 ];
 
 export const ANIMATION_PRESETS_3D: AnimationPreset3D[] = [
-  { id: 'rotateX', label: '↻ Rotate X', targetMatrix: [[1, 0, 0], [0, 0, -1], [0, 1, 0]], duration: 1500, loop: true },
-  { id: 'rotateY', label: '↻ Rotate Y', targetMatrix: [[0, 0, 1], [0, 1, 0], [-1, 0, 0]], duration: 1500, loop: true },
-  { id: 'rotateZ', label: '↻ Rotate Z', targetMatrix: [[0, -1, 0], [1, 0, 0], [0, 0, 1]], duration: 1500, loop: true },
+  { id: 'rotateX', label: '↻ Rotate X 360°', targetMatrix: [[1, 0, 0], [0, 1, 0], [0, 0, 1]], duration: 2000, loop: true, rotationTargetDeg: 360, rotationAxis: 'X' },
+  { id: 'rotateY', label: '↻ Rotate Y 360°', targetMatrix: [[1, 0, 0], [0, 1, 0], [0, 0, 1]], duration: 2000, loop: true, rotationTargetDeg: 360, rotationAxis: 'Y' },
+  { id: 'rotateZ', label: '↻ Rotate Z 360°', targetMatrix: [[1, 0, 0], [0, 1, 0], [0, 0, 1]], duration: 2000, loop: true, rotationTargetDeg: 360, rotationAxis: 'Z' },
   { id: 'scale3d', label: '⊕ Scale 2×', targetMatrix: [[2, 0, 0], [0, 2, 0], [0, 0, 2]], duration: 1000, loop: true },
   { id: 'projectXY', label: '▬ Project XY', targetMatrix: [[1, 0, 0], [0, 1, 0], [0, 0, 0]], duration: 1200, loop: true },
   { id: 'reflectZ', label: '⇄ Reflect Z', targetMatrix: [[1, 0, 0], [0, 1, 0], [0, 0, -1]], duration: 1000, loop: true }

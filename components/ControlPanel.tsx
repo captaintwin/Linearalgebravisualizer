@@ -3,6 +3,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { Matrix2x2, Matrix3x3, Vector2D, Vector3D, DimensionMode, ControlTab, SvdStages } from '../types';
 import { PRESET_TRANSFORMATIONS_2D, PRESET_TRANSFORMATIONS_3D, ANIMATION_PRESETS_2D, ANIMATION_PRESETS_3D } from '../constants';
 import type { AnimationPreset2D, AnimationPreset3D } from '../constants';
+import { rotation2D, rotation3D } from '../utils/rotation';
 import MathFormula from './MathFormula';
 import type { Svd2DResult } from '../utils/svd2d';
 import { svdEffectiveMatrix } from '../utils/svd2d';
@@ -12,6 +13,8 @@ interface ControlPanelProps {
   isAnimating?: boolean;
   animationSpeed: number;
   setAnimationSpeed: (v: number) => void;
+  animationMode: 'repeat' | 'bounce';
+  setAnimationMode: (m: 'repeat' | 'bounce') => void;
   activeTab: Exclude<ControlTab, 'operations'>; setActiveTab: (t: Exclude<ControlTab, 'operations'>) => void;
   svdStages: SvdStages; setSvdStages: (s: SvdStages) => void;
   svdResult2D: Svd2DResult | null;
@@ -40,25 +43,13 @@ interface ControlPanelProps {
   onShare: () => void;
   onStartAnimation: (preset: AnimationPreset2D | AnimationPreset3D) => void;
   onStopAnimation: () => void;
+  rotationAngleDeg: number;
+  setRotationAngleDeg: (v: number) => void;
+  rotationAxis3D: 'X' | 'Y' | 'Z';
+  setRotationAxis3D: (a: 'X' | 'Y' | 'Z') => void;
 }
 
 const DEG2RAD = Math.PI / 180;
-
-function rotation2D(deg: number): Matrix2x2 {
-  const rad = deg * DEG2RAD;
-  const c = Math.cos(rad);
-  const s = Math.sin(rad);
-  return [[c, -s], [s, c]];
-}
-
-function rotation3D(axis: 'X' | 'Y' | 'Z', deg: number): Matrix3x3 {
-  const rad = deg * DEG2RAD;
-  const c = Math.cos(rad);
-  const s = Math.sin(rad);
-  if (axis === 'X') return [[1, 0, 0], [0, c, -s], [0, s, c]];
-  if (axis === 'Y') return [[c, 0, s], [0, 1, 0], [-s, 0, c]];
-  return [[c, -s, 0], [s, c, 0], [0, 0, 1]];
-}
 
 /** Format 2x2 matrix for LaTeX */
 function matTex(m: [[number, number], [number, number]], prec = 2) {
@@ -90,17 +81,15 @@ function SvdFormulaBlock({ svdResult, stages }: { svdResult: Svd2DResult; stages
 const ControlPanel: React.FC<ControlPanelProps> = (props) => {
   const { activeTab, setActiveTab, svdStages, setSvdStages, svdResult2D, showSvdEllipse, setShowSvdEllipse, svdEllipseScale, setSvdEllipseScale, svdEllipseColor, setSvdEllipseColor } = props;
   const [expanded, setExpanded] = useState({ matrix: true, scalar: true, vectors: true, presets: true, animations: true, rotation: true, svd: true });
-  const [rotationAngleDeg, setRotationAngleDeg] = useState(45);
-  const [rotationAxis3D, setRotationAxis3D] = useState<'X' | 'Y' | 'Z'>('Z');
 
   useEffect(() => {
     if (props.isAnimating) return;
     if (props.mode === '2D') {
-      props.setMatrix2D(rotation2D(rotationAngleDeg));
+      props.setMatrix2D(rotation2D(props.rotationAngleDeg));
     } else {
-      props.setMatrix3D(rotation3D(rotationAxis3D, rotationAngleDeg));
+      props.setMatrix3D(rotation3D(props.rotationAxis3D, props.rotationAngleDeg));
     }
-  }, [props.mode, props.isAnimating, rotationAngleDeg, rotationAxis3D]);
+  }, [props.mode, props.isAnimating, props.rotationAngleDeg, props.rotationAxis3D]);
 
   const toggleSection = (section: keyof typeof expanded) => {
     setExpanded(prev => ({ ...prev, [section]: !prev[section] }));
@@ -221,6 +210,9 @@ const ControlPanel: React.FC<ControlPanelProps> = (props) => {
                   <span className={`text-emerald-500 transition-transform ${expanded.rotation ? 'rotate-0' : '-rotate-90'}`}>▼</span>
                   <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-widest group-hover:text-slate-300">Rotation</h3>
                 </div>
+                <div className="flex gap-2" onClick={e => e.stopPropagation()}>
+                  <button onClick={() => { props.setRotationAngleDeg(0); props.setRotationAxis3D('Z'); }} className="p-2 bg-slate-800 rounded text-[9px] font-bold hover:bg-slate-700 transition-colors" title="Reset Rotation">↺</button>
+                </div>
               </div>
 
               {expanded.rotation && (
@@ -230,15 +222,15 @@ const ControlPanel: React.FC<ControlPanelProps> = (props) => {
                       <div className="space-y-2">
                         <div className="flex justify-between items-center text-[10px]">
                           <span className="text-slate-500 font-bold uppercase">Angle (degrees)</span>
-                          <span className="text-emerald-400 font-mono font-bold">{rotationAngleDeg}°</span>
+                          <span className="text-emerald-400 font-mono font-bold">{props.rotationAngleDeg}°</span>
                         </div>
                         <input
                           type="range"
                           min="-180"
                           max="180"
                           step="1"
-                          value={rotationAngleDeg}
-                          onChange={(e) => setRotationAngleDeg(parseFloat(e.target.value))}
+                          value={props.rotationAngleDeg}
+                          onChange={(e) => props.setRotationAngleDeg(parseFloat(e.target.value))}
                           className="w-full accent-emerald-500 h-1.5 opacity-70 hover:opacity-100 transition-opacity"
                         />
                       </div>
@@ -251,8 +243,8 @@ const ControlPanel: React.FC<ControlPanelProps> = (props) => {
                           {(['X', 'Y', 'Z'] as const).map(ax => (
                             <button
                               key={ax}
-                              onClick={() => setRotationAxis3D(ax)}
-                              className={`flex-1 py-2 rounded-lg text-[10px] font-black uppercase transition-all ${rotationAxis3D === ax ? 'bg-emerald-600 text-white border border-emerald-400' : 'bg-slate-800 text-slate-400 border border-slate-700 hover:border-slate-600'}`}
+                              onClick={() => props.setRotationAxis3D(ax)}
+                              className={`flex-1 py-2 rounded-lg text-[10px] font-black uppercase transition-all ${props.rotationAxis3D === ax ? 'bg-emerald-600 text-white border border-emerald-400' : 'bg-slate-800 text-slate-400 border border-slate-700 hover:border-slate-600'}`}
                             >
                               {ax}
                             </button>
@@ -262,15 +254,15 @@ const ControlPanel: React.FC<ControlPanelProps> = (props) => {
                       <div className="space-y-2">
                         <div className="flex justify-between items-center text-[10px]">
                           <span className="text-slate-500 font-bold uppercase">Angle (degrees)</span>
-                          <span className="text-emerald-400 font-mono font-bold">{rotationAngleDeg}°</span>
+                          <span className="text-emerald-400 font-mono font-bold">{props.rotationAngleDeg}°</span>
                         </div>
                         <input
                           type="range"
                           min="-180"
                           max="180"
                           step="1"
-                          value={rotationAngleDeg}
-                          onChange={(e) => setRotationAngleDeg(parseFloat(e.target.value))}
+                          value={props.rotationAngleDeg}
+                          onChange={(e) => props.setRotationAngleDeg(parseFloat(e.target.value))}
                           className="w-full accent-emerald-500 h-1.5 opacity-70 hover:opacity-100 transition-opacity"
                         />
                       </div>
@@ -487,6 +479,20 @@ const ControlPanel: React.FC<ControlPanelProps> = (props) => {
               {expanded.animations && (
                 <div className="space-y-3 animate-in fade-in slide-in-from-top-2 duration-300">
                   <div className="space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-[10px] text-slate-500 font-bold uppercase">Mode</span>
+                      <div className="flex rounded-lg overflow-hidden border border-slate-700">
+                        {(['repeat', 'bounce'] as const).map(m => (
+                          <button
+                            key={m}
+                            onClick={() => props.setAnimationMode(m)}
+                            className={`px-3 py-1.5 text-[9px] font-black uppercase transition-all ${props.animationMode === m ? 'bg-amber-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-slate-200'}`}
+                          >
+                            {m}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
                     <div className="flex justify-between items-center text-[10px]">
                       <span className="text-slate-500 font-bold uppercase">Speed</span>
                       <span className="text-amber-400 font-mono font-bold">{props.animationSpeed.toFixed(2)}×</span>

@@ -13,6 +13,7 @@ import {
 } from './constants';
 import type { AnimationPreset2D, AnimationPreset3D } from './constants';
 import { lerpMatrix2D, lerpMatrix3D } from './utils/animateMatrix';
+import { rotation2D, rotation3D, angleFromRotation2D, angleFromRotation3D } from './utils/rotation';
 import { Matrix2x2, Matrix3x3, Vector2D, Vector3D, DimensionMode, ControlTab, SvdStages } from './types';
 import { svd2d, svdEffectiveMatrix } from './utils/svd2d';
 
@@ -32,12 +33,17 @@ const App: React.FC = () => {
   const [animationSpeed, setAnimationSpeed] = useState(1.0); // 0.25x .. 2x
   const animationSpeedRef = useRef(animationSpeed);
   animationSpeedRef.current = animationSpeed;
+  const [animationMode, setAnimationMode] = useState<'repeat' | 'bounce'>('repeat');
+  const animationModeRef = useRef(animationMode);
+  animationModeRef.current = animationMode;
   const [activeTab, setActiveTab] = useState<Exclude<ControlTab, 'operations'>>('transform');
   const [svdStages, setSvdStages] = useState<SvdStages>({ vT: true, sigma: true, u: true });
   const [showSvdEllipse, setShowSvdEllipse] = useState<boolean>(false);
   const [svdEllipseScale, setSvdEllipseScale] = useState<number>(2.5);
   const [svdEllipseColor, setSvdEllipseColor] = useState<string>('#f97316');
-  
+  const [rotationAngleDeg, setRotationAngleDeg] = useState(0);
+  const [rotationAxis3D, setRotationAxis3D] = useState<'X' | 'Y' | 'Z'>('Z');
+
   // UI States
   const [isKernelCollapsed, setIsKernelCollapsed] = useState<boolean>(false);
   const [isPropertiesCollapsed, setIsPropertiesCollapsed] = useState<boolean>(false);
@@ -64,10 +70,31 @@ const App: React.FC = () => {
     preset2D?: AnimationPreset2D;
     preset3D?: AnimationPreset3D;
     mode: DimensionMode;
+    animationMode: 'repeat' | 'bounce';
   } | null>(null);
 
+  const resetToDefaults = useCallback(() => {
+    animationRef.current = null;
+    setIsAnimating(false);
+    setMatrix2D(INITIAL_MATRIX_2D.map(r => [...r]) as Matrix2x2);
+    setMatrix3D(INITIAL_MATRIX_3D.map(r => [...r]) as Matrix3x3);
+    setVectors2D(INITIAL_VECTORS_2D.map(v => ({ ...v })));
+    setVectors3D(INITIAL_VECTORS_3D.map(v => ({ ...v })));
+    setScalar(1.0);
+    setRotationAngleDeg(0);
+    setRotationAxis3D('Z');
+  }, []);
+
+  const setAnimationModeWithRef = useCallback((m: 'repeat' | 'bounce') => {
+    animationModeRef.current = m;
+    setAnimationMode(m);
+    if (m !== animationMode) resetToDefaults(); // on mode switch: stop animation, reset to defaults
+  }, [animationMode, resetToDefaults]);
+
   const startAnimation = useCallback((preset: AnimationPreset2D | AnimationPreset3D) => {
+    resetToDefaults(); // reset matrix, vectors, scalar, rotation; then start from defaults
     setIsAnimating(true);
+    const animMode = animationModeRef.current;
     if (mode === '2D' && preset.targetMatrix.length === 2) {
       const p = preset as AnimationPreset2D;
       animationRef.current = {
@@ -75,7 +102,8 @@ const App: React.FC = () => {
         startMatrix2D: matrix2D.map(r => [...r]) as Matrix2x2,
         startMatrix3D: matrix3D.map(r => [...r]) as Matrix3x3,
         preset2D: p,
-        mode: '2D'
+        mode: '2D',
+        animationMode: animMode
       };
     } else if (mode === '3D' && preset.targetMatrix.length === 3) {
       const p = preset as AnimationPreset3D;
@@ -84,15 +112,15 @@ const App: React.FC = () => {
         startMatrix2D: matrix2D.map(r => [...r]) as Matrix2x2,
         startMatrix3D: matrix3D.map(r => [...r]) as Matrix3x3,
         preset3D: p,
-        mode: '3D'
+        mode: '3D',
+        animationMode: animMode
       };
     }
-  }, [mode, matrix2D, matrix3D]);
+  }, [mode, matrix2D, matrix3D, resetToDefaults]);
 
   const stopAnimation = useCallback(() => {
-    animationRef.current = null;
-    setIsAnimating(false);
-  }, []);
+    resetToDefaults();
+  }, [resetToDefaults]);
 
   useEffect(() => {
     let rafId: number;
@@ -101,23 +129,40 @@ const App: React.FC = () => {
       if (anim) {
         const preset = anim.mode === '2D' ? anim.preset2D : anim.preset3D;
         if (preset) {
-          const totalDuration = preset.loop ? preset.duration * 2 : preset.duration; // there + back
+          const isBounce = anim.animationMode === 'bounce' && preset.loop;
+          const totalDuration = isBounce ? preset.duration * 2 : preset.duration; // bounce: there+back; repeat: single pass
           const elapsed = performance.now() - anim.startTime;
           const effectiveElapsed = elapsed * animationSpeedRef.current;
-          const cycleElapsed = effectiveElapsed % totalDuration; // ping-pong: there then back
-          const isBackPhase = preset.loop && cycleElapsed >= preset.duration;
-          const t = preset.loop
+          const cycleElapsed = effectiveElapsed % totalDuration;
+          const isBackPhase = isBounce && cycleElapsed >= preset.duration;
+          const t = isBounce
             ? (isBackPhase
                 ? (cycleElapsed - preset.duration) / preset.duration  // 0→1 back: B → A
                 : cycleElapsed / preset.duration)                        // 0→1 there: A → B
-            : Math.min(1, cycleElapsed / preset.duration);
-          if (anim.mode === '2D' && anim.preset2D) {
-            const start = isBackPhase ? anim.preset2D.targetMatrix : anim.startMatrix2D;
-            const target = isBackPhase ? anim.startMatrix2D : anim.preset2D.targetMatrix;
+            : (preset.loop ? cycleElapsed / preset.duration : Math.min(1, cycleElapsed / preset.duration)); // repeat: 0→1 A→B, then restart
+
+          // Rotation presets: interpolate angle (like Rotation block) — no matrix lerp, no scale/shear
+          const p2 = anim.preset2D;
+          const p3 = anim.preset3D;
+          if (p2 && (p2 as AnimationPreset2D).rotationTargetDeg != null) {
+            const startAngle = angleFromRotation2D(anim.startMatrix2D);
+            const targetAngle = (p2 as AnimationPreset2D).rotationTargetDeg!;
+            const angle = startAngle + (targetAngle - startAngle) * (isBackPhase ? 1 - t : t);
+            setMatrix2D(rotation2D(angle));
+          } else if (p3 && (p3 as AnimationPreset3D).rotationTargetDeg != null && (p3 as AnimationPreset3D).rotationAxis) {
+            const axis = (p3 as AnimationPreset3D).rotationAxis!;
+            const info = angleFromRotation3D(anim.startMatrix3D);
+            const startAngle = info ? info.angle : 0;
+            const targetAngle = (p3 as AnimationPreset3D).rotationTargetDeg!;
+            const angle = startAngle + (targetAngle - startAngle) * (isBackPhase ? 1 - t : t);
+            setMatrix3D(rotation3D(axis, angle));
+          } else if (anim.mode === '2D' && p2) {
+            const start = isBackPhase ? p2.targetMatrix : anim.startMatrix2D;
+            const target = isBackPhase ? anim.startMatrix2D : p2.targetMatrix;
             setMatrix2D(lerpMatrix2D(start, target, t));
-          } else if (anim.mode === '3D' && anim.preset3D) {
-            const start = isBackPhase ? anim.preset3D.targetMatrix : anim.startMatrix3D;
-            const target = isBackPhase ? anim.startMatrix3D : anim.preset3D.targetMatrix;
+          } else if (anim.mode === '3D' && p3) {
+            const start = isBackPhase ? p3.targetMatrix : anim.startMatrix3D;
+            const target = isBackPhase ? anim.startMatrix3D : p3.targetMatrix;
             setMatrix3D(lerpMatrix3D(start, target, t));
           }
         }
@@ -525,6 +570,8 @@ const App: React.FC = () => {
             isAnimating={isAnimating}
             animationSpeed={animationSpeed}
             setAnimationSpeed={setAnimationSpeed}
+            animationMode={animationMode}
+            setAnimationMode={setAnimationModeWithRef}
             activeTab={activeTab} setActiveTab={setActiveTab}
             svdStages={svdStages} setSvdStages={setSvdStages}
             svdResult2D={svdResult2D}
@@ -567,6 +614,10 @@ const App: React.FC = () => {
             onShare={handleShare}
             onStartAnimation={startAnimation}
             onStopAnimation={stopAnimation}
+            rotationAngleDeg={rotationAngleDeg}
+            setRotationAngleDeg={setRotationAngleDeg}
+            rotationAxis3D={rotationAxis3D}
+            setRotationAxis3D={setRotationAxis3D}
           />
         </aside>
 
