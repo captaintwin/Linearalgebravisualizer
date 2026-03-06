@@ -20,6 +20,13 @@ export type Matrix3x3 = [[number, number, number], [number, number, number], [nu
 export type DimensionMode = '2D' | '3D';
 export type ControlTab = 'transform' | 'operations' | 'settings';
 
+/** SVD stage toggles for 2D illustration: Vᵀ → Σ → U */
+export interface SvdStages {
+  vT: boolean;
+  sigma: boolean;
+  u: boolean;
+}
+
 /**
  * Interface for the AI-generated geometric insights.
  * Used for structured JSON responses from Gemini.

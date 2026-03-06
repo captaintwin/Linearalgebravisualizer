@@ -1,11 +1,19 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { Matrix2x2, Matrix3x3, Vector2D, Vector3D, DimensionMode, ControlTab } from '../types';
+import { Matrix2x2, Matrix3x3, Vector2D, Vector3D, DimensionMode, ControlTab, SvdStages } from '../types';
 import { PRESET_TRANSFORMATIONS_2D, PRESET_TRANSFORMATIONS_3D } from '../constants';
 import MathFormula from './MathFormula';
+import type { Svd2DResult } from '../utils/svd2d';
+import { svdEffectiveMatrix } from '../utils/svd2d';
 
 interface ControlPanelProps {
   mode: DimensionMode;
+  activeTab: Exclude<ControlTab, 'operations'>; setActiveTab: (t: Exclude<ControlTab, 'operations'>) => void;
+  svdStages: SvdStages; setSvdStages: (s: SvdStages) => void;
+  svdResult2D: Svd2DResult | null;
+  showSvdEllipse: boolean; setShowSvdEllipse: (b: boolean) => void;
+  svdEllipseScale: number; setSvdEllipseScale: (n: number) => void;
+  svdEllipseColor: string; setSvdEllipseColor: (c: string) => void;
   matrix2D: Matrix2x2; setMatrix2D: (m: Matrix2x2) => void;
   matrix3D: Matrix3x3; setMatrix3D: (m: Matrix3x3) => void;
   vectors2D: Vector2D[]; setVectors2D: (vecs: Vector2D[]) => void;
@@ -46,9 +54,36 @@ function rotation3D(axis: 'X' | 'Y' | 'Z', deg: number): Matrix3x3 {
   return [[c, -s, 0], [s, c, 0], [0, 0, 1]];
 }
 
+/** Format 2x2 matrix for LaTeX */
+function matTex(m: [[number, number], [number, number]], prec = 2) {
+  const f = (x: number) => x.toFixed(prec);
+  return `\\begin{pmatrix} ${f(m[0][0])} & ${f(m[0][1])} \\\\ ${f(m[1][0])} & ${f(m[1][1])} \\end{pmatrix}`;
+}
+
+/** Current SVD step formula: shows U, Σ, Vᵀ with numbers and effective matrix */
+function SvdFormulaBlock({ svdResult, stages }: { svdResult: Svd2DResult; stages: SvdStages }) {
+  const { U, Sigma, V } = svdResult;
+  const VT: [[number, number], [number, number]] = [[V[0][0], V[1][0]], [V[0][1], V[1][1]]];
+  const effective = useMemo(() => svdEffectiveMatrix(svdResult, stages), [svdResult, stages]);
+
+  const uTex = matTex(U);
+  const sigmaTex = matTex(Sigma);
+  const vtTex = matTex(VT);
+  const aTex = matTex(effective);
+
+  const formula = `U = ${uTex} \\quad \\Sigma = ${sigmaTex} \\quad V^T = ${vtTex} \\quad \\Rightarrow \\quad A = ${aTex}`;
+
+  return (
+    <div className="rounded-2xl border border-slate-800 bg-slate-950/50 p-4">
+      <div className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">Current transform</div>
+      <MathFormula formula={formula} className="text-[10px] text-indigo-200 font-mono block overflow-x-auto" displayMode />
+    </div>
+  );
+}
+
 const ControlPanel: React.FC<ControlPanelProps> = (props) => {
-  const [activeTab, setActiveTab] = useState<Exclude<ControlTab, 'operations'>>('transform');
-  const [expanded, setExpanded] = useState({ matrix: true, scalar: true, vectors: true, presets: true, rotation: true });
+  const { activeTab, setActiveTab, svdStages, setSvdStages, svdResult2D, showSvdEllipse, setShowSvdEllipse, svdEllipseScale, setSvdEllipseScale, svdEllipseColor, setSvdEllipseColor } = props;
+  const [expanded, setExpanded] = useState({ matrix: true, scalar: true, vectors: true, presets: true, rotation: true, svd: true });
   const [rotationAngleDeg, setRotationAngleDeg] = useState(45);
   const [rotationAxis3D, setRotationAxis3D] = useState<'X' | 'Y' | 'Z'>('Z');
 
@@ -328,6 +363,102 @@ const ControlPanel: React.FC<ControlPanelProps> = (props) => {
                       </div>
                     </div>
                   ))}
+                </div>
+              )}
+            </section>
+
+            {/* SVD Section (2D only) - before Presets */}
+            <section className="space-y-4">
+              <div 
+                className="flex justify-between items-center cursor-pointer group"
+                onClick={() => toggleSection('svd')}
+              >
+                <div className="flex items-center gap-2">
+                  <span className={`text-indigo-500 transition-transform ${expanded.svd ? 'rotate-0' : '-rotate-90'}`}>▼</span>
+                  <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-widest group-hover:text-slate-300">SVD (A = U Σ Vᵀ)</h3>
+                </div>
+              </div>
+
+              {expanded.svd && (
+                <div className="bg-slate-950/50 p-6 rounded-2xl border border-slate-800 shadow-inner space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
+                  {props.mode !== '2D' ? (
+                    <p className="text-slate-400 text-sm">SVD is available in <strong className="text-indigo-400">2D</strong> mode.</p>
+                  ) : svdResult2D ? (
+                    <>
+                      <label className="flex items-center gap-3 cursor-pointer group">
+                        <input
+                          type="checkbox"
+                          checked={showSvdEllipse}
+                          onChange={(e) => setShowSvdEllipse(e.target.checked)}
+                          className="w-4 h-4 accent-indigo-600"
+                        />
+                        <span className="text-[11px] font-bold text-slate-300 group-hover:text-white">Show on canvas</span>
+                      </label>
+                      <div className="space-y-2">
+                        <div className="flex justify-between items-center">
+                          <span className="text-[10px] text-slate-400 font-bold uppercase">Ellipse scale</span>
+                          <span className="text-[10px] font-mono text-orange-400 font-bold">{svdEllipseScale.toFixed(1)}×</span>
+                        </div>
+                        <input
+                          type="range"
+                          min="0.5"
+                          max="5"
+                          step="0.1"
+                          value={svdEllipseScale}
+                          onChange={(e) => setSvdEllipseScale(parseFloat(e.target.value))}
+                          className="w-full accent-orange-500 h-1.5 opacity-70 hover:opacity-100 transition-opacity"
+                        />
+                      </div>
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-[10px] text-slate-400 font-bold uppercase">Ellipse color</span>
+                        <input
+                          type="color"
+                          value={svdEllipseColor}
+                          onChange={(e) => setSvdEllipseColor(e.target.value)}
+                          className="w-8 h-5 bg-transparent border-none cursor-pointer rounded"
+                        />
+                      </div>
+                      <div className="flex items-center justify-between gap-2 flex-wrap">
+                        <h4 className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Stages</h4>
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setSvdStages({ vT: false, sigma: false, u: false })}
+                            className="text-[9px] font-bold uppercase tracking-wider px-2.5 py-1.5 rounded-lg border border-slate-600 text-slate-400 hover:text-slate-200 hover:border-slate-500 hover:bg-slate-800/50 transition-colors"
+                          >
+                            Clear all
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setSvdStages({ vT: true, sigma: true, u: true })}
+                            className="text-[9px] font-bold uppercase tracking-wider px-2.5 py-1.5 rounded-lg border border-indigo-500/50 text-indigo-400 hover:text-indigo-300 hover:bg-indigo-500/10 transition-colors"
+                          >
+                            All stages
+                          </button>
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap gap-4">
+                        {[
+                          { key: 'vT' as const, label: 'Vᵀ' },
+                          { key: 'sigma' as const, label: 'Σ' },
+                          { key: 'u' as const, label: 'U' },
+                        ].map(({ key, label }) => (
+                          <label key={key} className="flex items-center gap-2 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={svdStages[key]}
+                              onChange={(e) => setSvdStages((s) => ({ ...s, [key]: e.target.checked }))}
+                              className="w-4 h-4 accent-indigo-600"
+                            />
+                            <span className="text-[11px] font-bold text-slate-300">{label}</span>
+                          </label>
+                        ))}
+                      </div>
+                      <SvdFormulaBlock svdResult={svdResult2D} stages={svdStages} />
+                    </>
+                  ) : (
+                    <p className="text-slate-400 text-sm">No SVD data.</p>
+                  )}
                 </div>
               )}
             </section>

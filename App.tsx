@@ -10,7 +10,8 @@ import {
   INITIAL_MATRIX_2D, INITIAL_VECTORS_2D, 
   INITIAL_MATRIX_3D, INITIAL_VECTORS_3D 
 } from './constants';
-import { Matrix2x2, Matrix3x3, Vector2D, Vector3D, DimensionMode } from './types';
+import { Matrix2x2, Matrix3x3, Vector2D, Vector3D, DimensionMode, ControlTab, SvdStages } from './types';
+import { svd2d, svdEffectiveMatrix } from './utils/svd2d';
 
 const STORAGE_KEY = 'linear_lab_stable_v1';
 
@@ -22,6 +23,13 @@ const App: React.FC = () => {
   const [vectors3D, setVectors3D] = useState<Vector3D[]>(INITIAL_VECTORS_3D);
   const [selectedVectorIdx, setSelectedVectorIdx] = useState<number>(0);
   const [scalar, setScalar] = useState<number>(1.0);
+
+  // Tabs (transform | svd | settings) and SVD stage toggles
+  const [activeTab, setActiveTab] = useState<Exclude<ControlTab, 'operations'>>('transform');
+  const [svdStages, setSvdStages] = useState<SvdStages>({ vT: true, sigma: true, u: true });
+  const [showSvdEllipse, setShowSvdEllipse] = useState<boolean>(false);
+  const [svdEllipseScale, setSvdEllipseScale] = useState<number>(2.5);
+  const [svdEllipseColor, setSvdEllipseColor] = useState<string>('#f97316');
   
   // UI States
   const [isKernelCollapsed, setIsKernelCollapsed] = useState<boolean>(false);
@@ -273,6 +281,12 @@ const App: React.FC = () => {
     }
   }, [matrix2D, matrix3D, mode, scalar]);
 
+  const svdResult2D = useMemo(() => (mode === '2D' ? svd2d(matrix2D) : null), [mode, matrix2D]);
+  const displayMatrix2D = useMemo(() => {
+    if (mode !== '2D' || !showSvdEllipse || !svdResult2D) return matrix2D;
+    return svdEffectiveMatrix(svdResult2D, svdStages);
+  }, [mode, showSvdEllipse, matrix2D, svdResult2D, svdStages]);
+
   const handleKernelPointerDown = useCallback((e: React.PointerEvent) => {
     if ((e.target as HTMLElement).closest('[data-no-drag]')) return;
     const viewer = viewerRef.current;
@@ -381,7 +395,7 @@ const App: React.FC = () => {
 
   const transformationMainFormula = useMemo(() => {
     if (mode === '2D') {
-      const [[a, b], [c, d]] = matrix2D;
+      const [[a, b], [c, d]] = displayMatrix2D;
       const v = vectors2D[selectedVectorIdx] || vectors2D[0];
       const rx = (a * v.x + b * v.y) * scalar;
       const ry = (c * v.x + d * v.y) * scalar;
@@ -394,7 +408,7 @@ const App: React.FC = () => {
       const rz = (m[2][0] * v.x + m[2][1] * v.y + m[2][2] * v.z) * scalar;
       return `${scalar.toFixed(1)} \\cdot \\begin{pmatrix} ${m[0][0].toFixed(1)} & ${m[0][1].toFixed(1)} & ${m[0][2].toFixed(1)} \\\\ ${m[1][0].toFixed(1)} & ${m[1][1].toFixed(1)} & ${m[1][2].toFixed(1)} \\\\ ${m[2][0].toFixed(1)} & ${m[2][1].toFixed(1)} & ${m[2][2].toFixed(1)} \\end{pmatrix} \\begin{pmatrix} ${v.x.toFixed(1)} \\\\ ${v.y.toFixed(1)} \\\\ ${v.z.toFixed(1)} \\end{pmatrix} = \\begin{pmatrix} ${rx.toFixed(1)} \\\\ ${ry.toFixed(1)} \\\\ ${rz.toFixed(1)} \\end{pmatrix}`;
     }
-  }, [matrix2D, matrix3D, vectors2D, vectors3D, mode, selectedVectorIdx, scalar]);
+  }, [displayMatrix2D, matrix3D, vectors2D, vectors3D, mode, selectedVectorIdx, scalar]);
 
   return (
     <div className="flex flex-col h-screen max-h-screen bg-slate-950 text-slate-100 overflow-hidden font-sans">
@@ -431,6 +445,12 @@ const App: React.FC = () => {
         <aside className="flex-1 lg:w-96 bg-slate-900/40 border-t lg:border-t-0 lg:border-r border-slate-800 overflow-hidden order-2 lg:order-1 flex flex-col">
           <ControlPanel 
             mode={mode}
+            activeTab={activeTab} setActiveTab={setActiveTab}
+            svdStages={svdStages} setSvdStages={setSvdStages}
+            svdResult2D={svdResult2D}
+            showSvdEllipse={showSvdEllipse} setShowSvdEllipse={setShowSvdEllipse}
+            svdEllipseScale={svdEllipseScale} setSvdEllipseScale={setSvdEllipseScale}
+            svdEllipseColor={svdEllipseColor} setSvdEllipseColor={setSvdEllipseColor}
             matrix2D={matrix2D} setMatrix2D={setMatrix2D}
             matrix3D={matrix3D} setMatrix3D={setMatrix3D}
             vectors2D={vectors2D} setVectors2D={setVectors2D}
@@ -592,13 +612,18 @@ const App: React.FC = () => {
 
             {mode === '2D' ? (
               <VectorCanvas 
-                matrix={matrix2D} 
+                matrix={displayMatrix2D} 
                 vectors={vectors2D} 
                 setVectors={setVectors2D} 
                 scalar={scalar}
                 showGrid={showGrid} 
                 showOriginalGrid={showOriginalGrid} 
                 showEigenvectors={showEigenvectors}
+                showSvdEllipse={showSvdEllipse}
+                svdResult2D={svdResult2D}
+                svdStages={svdStages}
+                svdEllipseScale={svdEllipseScale}
+                svdEllipseColor={svdEllipseColor}
                 gridColor={gridColor} 
                 originalGridColor={originalGridColor}
                 gridThickness={gridThickness}

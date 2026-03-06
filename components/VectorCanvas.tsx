@@ -1,7 +1,9 @@
 
 import React, { useEffect, useRef, useMemo } from 'react';
 import * as d3 from 'd3';
-import { Vector2D, Matrix2x2 } from '../types';
+import { Vector2D, Matrix2x2, SvdStages } from '../types';
+import type { Svd2DResult } from '../utils/svd2d';
+import { svdEffectiveMatrix } from '../utils/svd2d';
 
 interface VectorCanvasProps {
   matrix: Matrix2x2;
@@ -11,6 +13,11 @@ interface VectorCanvasProps {
   showGrid: boolean;
   showOriginalGrid: boolean;
   showEigenvectors: boolean;
+  showSvdEllipse?: boolean;
+  svdResult2D?: Svd2DResult | null;
+  svdStages?: SvdStages;
+  svdEllipseScale?: number;
+  svdEllipseColor?: string;
   gridColor: string;
   originalGridColor: string;
   gridThickness: number;
@@ -19,6 +26,8 @@ interface VectorCanvasProps {
 
 const VectorCanvas: React.FC<VectorCanvasProps> = ({ 
   matrix, vectors, setVectors, scalar, showGrid, showOriginalGrid, showEigenvectors,
+  showSvdEllipse = false, svdResult2D = null, svdStages = { vT: true, sigma: true, u: true },
+  svdEllipseScale = 2.5, svdEllipseColor = '#f97316',
   gridColor, originalGridColor, gridThickness, originalGridThickness 
 }) => {
   const svgRef = useRef<SVGSVGElement>(null);
@@ -180,7 +189,30 @@ const VectorCanvas: React.FC<VectorCanvasProps> = ({
       }) as any);
     });
 
-  }, [matrix, vectors, scalar, showGrid, showOriginalGrid, showEigenvectors, gridColor, originalGridColor, gridThickness, originalGridThickness, inverseMatrix, eigenData, setVectors]);
+    // 6. SVD ellipse overlay: unit circle (dashed) + image under effective matrix (ellipse)
+    if (showSvdEllipse && svdResult2D && svdStages) {
+      const effective = svdEffectiveMatrix(svdResult2D, svdStages);
+      const [[a, b], [c, d]] = effective;
+      const n = 64;
+      const unitCirclePts: [number, number][] = [];
+      const ellipsePts: [number, number][] = [];
+      for (let i = 0; i <= n; i++) {
+        const t = (i / n) * 2 * Math.PI;
+        const x = Math.cos(t);
+        const y = Math.sin(t);
+        unitCirclePts.push([xScale(x * svdEllipseScale), yScale(y * svdEllipseScale)]);
+        const ex = (a * x + b * y) * scalar * svdEllipseScale;
+        const ey = (c * x + d * y) * scalar * svdEllipseScale;
+        ellipsePts.push([xScale(ex), yScale(ey)]);
+      }
+      const unitPath = unitCirclePts.map(([px, py], i) => (i === 0 ? `M ${px} ${py}` : `L ${px} ${py}`)).join(' ');
+      const ellipsePath = ellipsePts.map(([px, py], i) => (i === 0 ? `M ${px} ${py}` : `L ${px} ${py}`)).join(' ');
+      const svdG = g.append('g').attr('class', 'svd-overlay');
+      svdG.append('path').attr('d', unitPath).attr('fill', 'none').attr('stroke', '#64748b').attr('stroke-width', 1.5).attr('stroke-dasharray', '4 3').attr('opacity', 0.6);
+      svdG.append('path').attr('d', ellipsePath).attr('fill', 'none').attr('stroke', svdEllipseColor).attr('stroke-width', 2.5).attr('stroke-linejoin', 'round').attr('opacity', 0.9);
+    }
+
+  }, [matrix, vectors, scalar, showGrid, showOriginalGrid, showEigenvectors, showSvdEllipse, svdResult2D, svdStages, svdEllipseScale, svdEllipseColor, gridColor, originalGridColor, gridThickness, originalGridThickness, inverseMatrix, eigenData, setVectors]);
 
   return (
     <div className="w-full h-full bg-slate-900/30 rounded-xl border border-slate-800 overflow-hidden relative shadow-inner">
