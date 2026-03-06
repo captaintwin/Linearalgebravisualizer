@@ -119,7 +119,7 @@ const VectorCanvas3D: React.FC<VectorCanvas3DProps> = ({
     scene.background = new THREE.Color(0x0a0f1e);
 
     const camera = new THREE.PerspectiveCamera(60, width / height, 0.1, 1000);
-    camera.position.set(8, 6, 8);
+    camera.position.set(18, 16, 18);
 
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     renderer.setSize(width, height);
@@ -130,6 +130,8 @@ const VectorCanvas3D: React.FC<VectorCanvas3DProps> = ({
     const orbit = new OrbitControls(camera, renderer.domElement);
     orbit.enableDamping = true;
     orbit.dampingFactor = 0.05;
+    orbit.minDistance = 4;
+    orbit.maxDistance = 50;
 
     scene.add(new THREE.AmbientLight(0xffffff, 0.6));
     const light = new THREE.DirectionalLight(0xffffff, 1);

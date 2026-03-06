@@ -155,7 +155,7 @@ const ControlPanel: React.FC<ControlPanelProps> = (props) => {
         ))}
       </div>
 
-      <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 lg:p-6 space-y-6 custom-scrollbar scrollbar-hide">
+      <div className="flex-1 overflow-y-auto overflow-x-hidden p-3 lg:p-4 space-y-4 custom-scrollbar scrollbar-hide">
         {activeTab === 'transform' && (
           <>
             {/* Matrix Section */}
@@ -175,7 +175,7 @@ const ControlPanel: React.FC<ControlPanelProps> = (props) => {
               </div>
               
               {expanded.matrix && (
-                <div className={`grid ${props.mode === '2D' ? 'grid-cols-2' : 'grid-cols-3'} gap-6 bg-slate-950/50 p-6 rounded-2xl border border-slate-800 shadow-inner animate-in fade-in slide-in-from-top-2 duration-300`}>
+                <div className={`grid ${props.mode === '2D' ? 'grid-cols-2' : 'grid-cols-3'} gap-4 bg-slate-950/50 p-4 rounded-2xl border border-slate-800 shadow-inner animate-in fade-in slide-in-from-top-2 duration-300`}>
                   {(props.mode === '2D' ? [0, 1] : [0, 1, 2]).map(r => 
                     (props.mode === '2D' ? [0, 1] : [0, 1, 2]).map(c => {
                       const val = props.mode === '2D' ? props.matrix2D[r][c] : props.matrix3D[r][c];
@@ -216,7 +216,7 @@ const ControlPanel: React.FC<ControlPanelProps> = (props) => {
               </div>
 
               {expanded.rotation && (
-                <div className="bg-slate-950/50 p-6 rounded-2xl border border-slate-800 shadow-inner space-y-5 animate-in fade-in slide-in-from-top-2 duration-300">
+                <div className="bg-slate-950/50 p-4 rounded-2xl border border-slate-800 shadow-inner space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
                   {props.mode === '2D' ? (
                     <>
                       <div className="space-y-2">
@@ -288,7 +288,7 @@ const ControlPanel: React.FC<ControlPanelProps> = (props) => {
               </div>
 
               {expanded.scalar && (
-                <div className="bg-slate-950/50 p-6 rounded-2xl border border-slate-800 shadow-inner space-y-3 animate-in fade-in slide-in-from-top-2 duration-300">
+                <div className="bg-slate-950/50 p-4 rounded-2xl border border-slate-800 shadow-inner space-y-2 animate-in fade-in slide-in-from-top-2 duration-300">
                   <div className="flex justify-between items-center">
                     <span className="text-[10px] font-mono text-slate-500">$k = $</span>
                     <span className="text-amber-400 font-bold">{props.scalar.toFixed(1)}</span>
@@ -322,7 +322,7 @@ const ControlPanel: React.FC<ControlPanelProps> = (props) => {
                     <div 
                       key={`${v.label}-${i}`} 
                       onClick={() => props.setSelectedVectorIdx(i)}
-                      className={`min-w-[240px] p-4 rounded-xl border cursor-pointer group snap-center shadow-lg flex flex-col gap-4 transition-all ${props.selectedVectorIdx === i ? 'bg-indigo-600/10 border-indigo-500 ring-1 ring-indigo-500/50' : 'bg-slate-900/60 border-slate-800 hover:border-slate-700'}`}
+                      className={`min-w-[200px] p-3 rounded-xl border cursor-pointer group snap-center shadow-lg flex flex-col gap-3 transition-all ${props.selectedVectorIdx === i ? 'bg-indigo-600/10 border-indigo-500 ring-1 ring-indigo-500/50' : 'bg-slate-900/60 border-slate-800 hover:border-slate-700'}`}
                     >
                       <div className="flex justify-between items-center">
                         <div className="flex items-center gap-2">
@@ -379,7 +379,7 @@ const ControlPanel: React.FC<ControlPanelProps> = (props) => {
               </div>
 
               {expanded.svd && (
-                <div className="bg-slate-950/50 p-6 rounded-2xl border border-slate-800 shadow-inner space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
+                <div className="bg-slate-950/50 p-4 rounded-2xl border border-slate-800 shadow-inner space-y-3 animate-in fade-in slide-in-from-top-2 duration-300">
                   {props.mode !== '2D' ? (
                     <p className="text-slate-400 text-sm">SVD is available in <strong className="text-indigo-400">2D</strong> mode.</p>
                   ) : svdResult2D ? (
@@ -570,7 +570,7 @@ const ControlPanel: React.FC<ControlPanelProps> = (props) => {
         )}
 
         {activeTab === 'settings' && (
-          <div className="space-y-6">
+          <div className="space-y-4">
             <button onClick={props.onShare} className="w-full py-4 bg-slate-800/50 hover:bg-slate-700 text-slate-200 text-[10px] font-black uppercase rounded-xl border border-slate-700 transition-all">
               Copy Workspace Link
             </button>

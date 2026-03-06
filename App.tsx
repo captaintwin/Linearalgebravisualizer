@@ -534,15 +534,15 @@ const App: React.FC = () => {
 
   return (
     <div className="flex flex-col h-screen max-h-screen bg-slate-950 text-slate-100 overflow-hidden font-sans">
-      <header className="bg-slate-900/90 backdrop-blur-md border-b border-slate-800 px-6 py-4 flex items-center justify-between z-20 shrink-0 shadow-lg">
-        <div className="flex items-center gap-4">
-          <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center shadow-indigo-500/20 shadow-xl">
-            <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <header className="bg-slate-900/90 backdrop-blur-md border-b border-slate-800 px-4 py-2.5 flex items-center justify-between z-20 shrink-0 shadow-lg">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center shadow-indigo-500/20 shadow-xl">
+            <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2-2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
             </svg>
           </div>
           <div>
-            <h1 className="text-xl font-black text-white tracking-tight uppercase">Linear Lab</h1>
+            <h1 className="text-lg font-black text-white tracking-tight uppercase">Linear Lab</h1>
             <div className="flex items-center gap-2">
               <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
               <span className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Workspace active • {lastSaved}</span>
@@ -564,7 +564,7 @@ const App: React.FC = () => {
       </header>
 
       <main className="flex-1 flex flex-col lg:flex-row overflow-hidden relative">
-        <aside className="flex-1 lg:w-96 bg-slate-900/40 border-t lg:border-t-0 lg:border-r border-slate-800 overflow-hidden order-2 lg:order-1 flex flex-col">
+        <aside className="flex-1 lg:w-80 bg-slate-900/40 border-t lg:border-t-0 lg:border-r border-slate-800 overflow-hidden order-2 lg:order-1 flex flex-col">
           <ControlPanel 
             mode={mode}
             isAnimating={isAnimating}
@@ -621,8 +621,8 @@ const App: React.FC = () => {
           />
         </aside>
 
-        <div className="flex-[1.5] lg:flex-1 p-4 lg:p-8 flex flex-col gap-8 overflow-hidden order-1 lg:order-2 bg-slate-950 relative z-10 custom-scrollbar">
-          <div ref={viewerRef} className="h-64 sm:h-[400px] lg:flex-1 relative group shrink-0 rounded-2xl overflow-hidden border border-slate-800/50 shadow-2xl">
+        <div className="flex-[1.5] lg:flex-1 p-3 lg:p-5 flex flex-col gap-5 overflow-hidden order-1 lg:order-2 bg-slate-950 relative z-10 custom-scrollbar">
+          <div ref={viewerRef} className="h-56 sm:h-[360px] lg:flex-1 relative group shrink-0 rounded-xl overflow-hidden border border-slate-800/50 shadow-2xl">
             
             {/* Overlay Formula (Kernel) - draggable */}
             <div 
