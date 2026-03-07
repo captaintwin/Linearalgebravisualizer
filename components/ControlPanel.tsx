@@ -1,8 +1,7 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { Matrix2x2, Matrix3x3, Vector2D, Vector3D, DimensionMode, ControlTab, SvdStages } from '../types';
-import { PRESET_TRANSFORMATIONS_2D, PRESET_TRANSFORMATIONS_3D, ANIMATION_PRESETS_2D, ANIMATION_PRESETS_3D } from '../constants';
-import type { AnimationPreset2D, AnimationPreset3D } from '../constants';
+import { PRESET_TRANSFORMATIONS_2D, PRESET_TRANSFORMATIONS_3D } from '../constants';
 import { rotation2D, rotation3D } from '../utils/rotation';
 import MathFormula from './MathFormula';
 import type { Svd2DResult } from '../utils/svd2d';
@@ -11,10 +10,6 @@ import { svdEffectiveMatrix } from '../utils/svd2d';
 interface ControlPanelProps {
   mode: DimensionMode;
   isAnimating?: boolean;
-  animationSpeed: number;
-  setAnimationSpeed: (v: number) => void;
-  animationMode: 'repeat' | 'bounce';
-  setAnimationMode: (m: 'repeat' | 'bounce') => void;
   activeTab: Exclude<ControlTab, 'operations'>; setActiveTab: (t: Exclude<ControlTab, 'operations'>) => void;
   svdStages: SvdStages; setSvdStages: (s: SvdStages) => void;
   svdResult2D: Svd2DResult | null;
@@ -41,12 +36,11 @@ interface ControlPanelProps {
   onResetAll: () => void;
   onTranspose: () => void;
   onShare: () => void;
-  onStartAnimation: (preset: AnimationPreset2D | AnimationPreset3D) => void;
-  onStopAnimation: () => void;
   rotationAngleDeg: number;
   setRotationAngleDeg: (v: number) => void;
   rotationAxis3D: 'X' | 'Y' | 'Z';
   setRotationAxis3D: (a: 'X' | 'Y' | 'Z') => void;
+  transformationFormula: string;
 }
 
 const DEG2RAD = Math.PI / 180;
@@ -80,7 +74,8 @@ function SvdFormulaBlock({ svdResult, stages }: { svdResult: Svd2DResult; stages
 
 const ControlPanel: React.FC<ControlPanelProps> = (props) => {
   const { activeTab, setActiveTab, svdStages, setSvdStages, svdResult2D, showSvdEllipse, setShowSvdEllipse, svdEllipseScale, setSvdEllipseScale, svdEllipseColor, setSvdEllipseColor } = props;
-  const [expanded, setExpanded] = useState({ matrix: true, scalar: true, vectors: true, presets: true, animations: true, rotation: true, svd: true });
+  const [expanded, setExpanded] = useState({ transform: true, vectors: true, svd: true });
+  const [transformSubTab, setTransformSubTab] = useState<'transformations' | 'presets'>('transformations');
 
   useEffect(() => {
     if (props.isAnimating) return;
@@ -141,167 +136,137 @@ const ControlPanel: React.FC<ControlPanelProps> = (props) => {
     }
   };
 
+  const mainTabStyle = (active: boolean) =>
+    `flex-1 py-3 text-[10px] font-black uppercase tracking-widest transition-all border-b-2 ${active ? 'text-indigo-400 border-indigo-500 bg-indigo-500/5' : 'text-slate-500 border-transparent hover:text-slate-300'}`;
+  const subTabStyle = (active: boolean) =>
+    `flex-1 py-3 text-[10px] font-black uppercase tracking-widest transition-all border-b-2 ${active ? 'text-indigo-200 border-indigo-500 bg-indigo-500/5' : 'text-slate-300 border-transparent hover:text-slate-100'}`;
+
   return (
     <div className="flex flex-col h-full bg-slate-900/20">
       <div className="flex border-b border-slate-800 bg-slate-900/60 shrink-0">
         {(['transform', 'settings'] as const).map(t => (
-          <button 
+          <button
             key={t}
             onClick={() => setActiveTab(t)}
-            className={`flex-1 py-3 text-[10px] font-black uppercase tracking-widest transition-all border-b-2 ${activeTab === t ? 'text-indigo-400 border-indigo-500 bg-indigo-500/5' : 'text-slate-500 border-transparent hover:text-slate-300'}`}
+            className={mainTabStyle(activeTab === t)}
           >
             {t}
           </button>
         ))}
       </div>
+      {activeTab === 'transform' && (
+        <div className="flex border-b border-slate-800 bg-slate-900/60 shrink-0">
+          {(['transformations', 'presets'] as const).map(t => (
+            <button
+              key={t}
+              onClick={() => setTransformSubTab(t)}
+              className={subTabStyle(transformSubTab === t)}
+            >
+              {t}
+            </button>
+          ))}
+        </div>
+      )}
 
       <div className="flex-1 overflow-y-auto overflow-x-hidden p-3 lg:p-4 space-y-4 custom-scrollbar scrollbar-hide">
         {activeTab === 'transform' && (
           <>
-            {/* Matrix Section */}
-            <section className="space-y-4">
+            {transformSubTab === 'transformations' && (
+          <>
+            {/* Active transform: Matrix + Rotation + Scalar (one block) */}
+            <section className="space-y-3">
               <div 
                 className="flex justify-between items-center cursor-pointer group"
-                onClick={() => toggleSection('matrix')}
+                onClick={() => toggleSection('transform')}
               >
                 <div className="flex items-center gap-2">
-                  <span className={`text-indigo-500 transition-transform ${expanded.matrix ? 'rotate-0' : '-rotate-90'}`}>▼</span>
-                  <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-widest group-hover:text-slate-300">Active Matrix (A)</h3>
+                  <span className={`text-indigo-500 transition-transform ${expanded.transform ? 'rotate-0' : '-rotate-90'}`}>▼</span>
+                  <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-widest group-hover:text-slate-300">Active Matrix, Rotation & Scalar</h3>
                 </div>
-                <div className="flex gap-2" onClick={e => e.stopPropagation()}>
-                  <button onClick={props.onTranspose} className="p-2 bg-slate-800 rounded text-[9px] font-bold hover:bg-slate-700 transition-colors" title="Transpose">T</button>
-                  <button onClick={props.onResetMatrix} className="p-2 bg-slate-800 rounded text-[9px] font-bold hover:bg-slate-700 transition-colors" title="Reset Matrix">↺</button>
+                <div className="flex gap-1" onClick={e => e.stopPropagation()}>
+                  <button onClick={props.onTranspose} className="p-1.5 bg-slate-800 rounded text-[8px] font-bold hover:bg-slate-700" title="Transpose">T</button>
+                  <button onClick={props.onResetMatrix} className="p-1.5 bg-slate-800 rounded text-[8px] font-bold hover:bg-slate-700" title="Reset Matrix">↺</button>
+                  <button onClick={() => { props.setRotationAngleDeg(0); props.setRotationAxis3D('Z'); }} className="p-1.5 bg-slate-800 rounded text-[8px] font-bold hover:bg-slate-700" title="Reset Rotation">↺</button>
+                  <button onClick={() => props.setScalar(1.0)} className="p-1.5 bg-slate-800 rounded text-[8px] font-bold hover:bg-slate-700" title="Reset Scalar">↺</button>
                 </div>
               </div>
-              
-              {expanded.matrix && (
-                <div className={`grid ${props.mode === '2D' ? 'grid-cols-2' : 'grid-cols-3'} gap-4 bg-slate-950/50 p-4 rounded-2xl border border-slate-800 shadow-inner animate-in fade-in slide-in-from-top-2 duration-300`}>
-                  {(props.mode === '2D' ? [0, 1] : [0, 1, 2]).map(r => 
-                    (props.mode === '2D' ? [0, 1] : [0, 1, 2]).map(c => {
-                      const val = props.mode === '2D' ? props.matrix2D[r][c] : props.matrix3D[r][c];
-                      return (
-                        <div key={`${r}-${c}`} className="flex flex-col gap-2">
-                          <div className="flex justify-between items-center text-[9px] font-mono text-slate-500">
-                            <span>[{r},{c}]</span>
-                            <span className="text-indigo-400 font-bold">{val.toFixed(1)}</span>
+
+              {expanded.transform && (
+                <div className="bg-slate-950/50 p-3 rounded-xl border border-slate-800 shadow-inner space-y-3 animate-in fade-in slide-in-from-top-2 duration-300">
+                  <div className={`grid ${props.mode === '2D' ? 'grid-cols-2' : 'grid-cols-3'} gap-2`}>
+                    {(props.mode === '2D' ? [0, 1] : [0, 1, 2]).map(r => 
+                      (props.mode === '2D' ? [0, 1] : [0, 1, 2]).map(c => {
+                        const val = props.mode === '2D' ? props.matrix2D[r][c] : props.matrix3D[r][c];
+                        return (
+                          <div key={`${r}-${c}`} className="flex flex-col gap-1">
+                            <div className="flex justify-between items-center text-[8px] font-mono text-slate-500">
+                              <span>[{r},{c}]</span>
+                              <span className="text-indigo-400 font-bold">{val.toFixed(1)}</span>
+                            </div>
+                            <input 
+                              type="range" 
+                              min="-4" max="4" step="0.1" 
+                              value={val}
+                              onChange={(e) => handleMatrixChange(r, c, parseFloat(e.target.value))}
+                              className="w-full accent-indigo-500 h-1 opacity-70 hover:opacity-100"
+                            />
                           </div>
-                          <input 
-                            type="range" 
-                            min="-4" max="4" step="0.1" 
-                            value={val}
-                            onChange={(e) => handleMatrixChange(r, c, parseFloat(e.target.value))}
-                            className="w-full accent-indigo-500 h-1.5 opacity-70 hover:opacity-100 transition-opacity"
-                          />
-                        </div>
-                      );
-                    })
-                  )}
-                </div>
-              )}
-            </section>
+                        );
+                      })
+                    )}
+                  </div>
 
-            {/* Rotation Section */}
-            <section className="space-y-4">
-              <div 
-                className="flex justify-between items-center cursor-pointer group"
-                onClick={() => toggleSection('rotation')}
-              >
-                <div className="flex items-center gap-2">
-                  <span className={`text-emerald-500 transition-transform ${expanded.rotation ? 'rotate-0' : '-rotate-90'}`}>▼</span>
-                  <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-widest group-hover:text-slate-300">Rotation</h3>
-                </div>
-                <div className="flex gap-2" onClick={e => e.stopPropagation()}>
-                  <button onClick={() => { props.setRotationAngleDeg(0); props.setRotationAxis3D('Z'); }} className="p-2 bg-slate-800 rounded text-[9px] font-bold hover:bg-slate-700 transition-colors" title="Reset Rotation">↺</button>
-                </div>
-              </div>
-
-              {expanded.rotation && (
-                <div className="bg-slate-950/50 p-4 rounded-2xl border border-slate-800 shadow-inner space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
-                  {props.mode === '2D' ? (
-                    <>
-                      <div className="space-y-2">
-                        <div className="flex justify-between items-center text-[10px]">
-                          <span className="text-slate-500 font-bold uppercase">Angle (degrees)</span>
-                          <span className="text-emerald-400 font-mono font-bold">{props.rotationAngleDeg}°</span>
-                        </div>
-                        <input
-                          type="range"
-                          min="-180"
-                          max="180"
-                          step="1"
-                          value={props.rotationAngleDeg}
-                          onChange={(e) => props.setRotationAngleDeg(parseFloat(e.target.value))}
-                          className="w-full accent-emerald-500 h-1.5 opacity-70 hover:opacity-100 transition-opacity"
-                        />
+                  <div className="grid grid-cols-2 gap-3 pt-1 border-t border-slate-800/50">
+                    <div className="space-y-1">
+                      <div className="flex justify-between items-center text-[8px]">
+                        <span className="text-slate-500 font-bold uppercase">Rotation</span>
+                        <span className="text-emerald-400 font-mono font-bold">{(((props.rotationAngleDeg % 360) + 360) % 360)}°</span>
                       </div>
-                    </>
-                  ) : (
-                    <>
-                      <div className="space-y-2">
-                        <span className="text-[10px] text-slate-500 font-bold uppercase">Axis</span>
-                        <div className="flex gap-2">
+                      {props.mode === '3D' && (
+                        <div className="flex gap-1 mb-1">
                           {(['X', 'Y', 'Z'] as const).map(ax => (
                             <button
                               key={ax}
                               onClick={() => props.setRotationAxis3D(ax)}
-                              className={`flex-1 py-2 rounded-lg text-[10px] font-black uppercase transition-all ${props.rotationAxis3D === ax ? 'bg-emerald-600 text-white border border-emerald-400' : 'bg-slate-800 text-slate-400 border border-slate-700 hover:border-slate-600'}`}
+                              className={`flex-1 py-1 rounded text-[8px] font-black uppercase ${props.rotationAxis3D === ax ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-400'}`}
                             >
                               {ax}
                             </button>
                           ))}
                         </div>
+                      )}
+                      <input
+                        type="range"
+                        min={0}
+                        max={359}
+                        step={1}
+                        value={((props.rotationAngleDeg % 360) + 360) % 360}
+                        onChange={(e) => props.setRotationAngleDeg(parseFloat(e.target.value))}
+                        className="w-full accent-emerald-500 h-1 opacity-70 hover:opacity-100"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <div className="flex justify-between items-center text-[8px]">
+                        <span className="text-slate-500 font-bold uppercase">$k$</span>
+                        <span className="text-amber-400 font-bold">{props.scalar.toFixed(1)}</span>
                       </div>
-                      <div className="space-y-2">
-                        <div className="flex justify-between items-center text-[10px]">
-                          <span className="text-slate-500 font-bold uppercase">Angle (degrees)</span>
-                          <span className="text-emerald-400 font-mono font-bold">{props.rotationAngleDeg}°</span>
-                        </div>
-                        <input
-                          type="range"
-                          min="-180"
-                          max="180"
-                          step="1"
-                          value={props.rotationAngleDeg}
-                          onChange={(e) => props.setRotationAngleDeg(parseFloat(e.target.value))}
-                          className="w-full accent-emerald-500 h-1.5 opacity-70 hover:opacity-100 transition-opacity"
-                        />
-                      </div>
-                    </>
-                  )}
+                      <input 
+                        type="range" 
+                        min="-4" max="4" step="0.1" 
+                        value={props.scalar}
+                        onChange={(e) => props.setScalar(parseFloat(e.target.value))}
+                        className="w-full accent-amber-500 h-1 opacity-70 hover:opacity-100"
+                      />
+                    </div>
+                  </div>
                 </div>
               )}
             </section>
 
-            {/* Scalar Section */}
-            <section className="space-y-4">
-              <div 
-                className="flex justify-between items-center cursor-pointer group"
-                onClick={() => toggleSection('scalar')}
-              >
-                <div className="flex items-center gap-2">
-                  <span className={`text-amber-500 transition-transform ${expanded.scalar ? 'rotate-0' : '-rotate-90'}`}>▼</span>
-                  <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-widest group-hover:text-slate-300">Scalar Multiplier ($k$)</h3>
-                </div>
-                <div className="flex gap-2" onClick={e => e.stopPropagation()}>
-                  <button onClick={() => props.setScalar(1.0)} className="p-2 bg-slate-800 rounded text-[9px] font-bold hover:bg-slate-700 transition-colors" title="Reset Scalar">↺</button>
-                </div>
-              </div>
-
-              {expanded.scalar && (
-                <div className="bg-slate-950/50 p-4 rounded-2xl border border-slate-800 shadow-inner space-y-2 animate-in fade-in slide-in-from-top-2 duration-300">
-                  <div className="flex justify-between items-center">
-                    <span className="text-[10px] font-mono text-slate-500">$k = $</span>
-                    <span className="text-amber-400 font-bold">{props.scalar.toFixed(1)}</span>
-                  </div>
-                  <input 
-                    type="range" 
-                    min="-4" max="4" step="0.1" 
-                    value={props.scalar}
-                    onChange={(e) => props.setScalar(parseFloat(e.target.value))}
-                    className="w-full accent-amber-500 h-1.5 opacity-70 hover:opacity-100 transition-opacity"
-                  />
-                </div>
-              )}
+            {/* Transform kernel formula (moved from canvas) */}
+            <section className="rounded-xl border border-slate-800 bg-slate-950/50 p-3 overflow-hidden">
+              <div className="text-[9px] font-black text-indigo-400 uppercase tracking-widest mb-2">Transform kernel</div>
+              <MathFormula formula={props.transformationFormula} className="text-[10px] font-mono text-slate-200 block overflow-hidden" />
             </section>
 
             {/* Vectors Section */}
@@ -464,108 +429,24 @@ const ControlPanel: React.FC<ControlPanelProps> = (props) => {
               )}
             </section>
 
-            {/* Animation Presets Section */}
-            <section className="space-y-4">
-              <div 
-                className="flex justify-between items-center cursor-pointer group"
-                onClick={() => toggleSection('animations')}
-              >
-                <div className="flex items-center gap-2">
-                  <span className={`text-amber-500 transition-transform ${expanded.animations ? 'rotate-0' : '-rotate-90'}`}>▼</span>
-                  <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-widest group-hover:text-slate-300">Animation Presets</h3>
-                </div>
-              </div>
-
-              {expanded.animations && (
-                <div className="space-y-3 animate-in fade-in slide-in-from-top-2 duration-300">
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-[10px] text-slate-500 font-bold uppercase">Mode</span>
-                      <div className="flex rounded-lg overflow-hidden border border-slate-700">
-                        {(['repeat', 'bounce'] as const).map(m => (
-                          <button
-                            key={m}
-                            onClick={() => props.setAnimationMode(m)}
-                            className={`px-3 py-1.5 text-[9px] font-black uppercase transition-all ${props.animationMode === m ? 'bg-amber-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-slate-200'}`}
-                          >
-                            {m}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                    <div className="flex justify-between items-center text-[10px]">
-                      <span className="text-slate-500 font-bold uppercase">Speed</span>
-                      <span className="text-amber-400 font-mono font-bold">{props.animationSpeed.toFixed(2)}×</span>
-                    </div>
-                    <input
-                      type="range"
-                      min={0.25}
-                      max={2}
-                      step={0.05}
-                      value={props.animationSpeed}
-                      onChange={(e) => props.setAnimationSpeed(parseFloat(e.target.value))}
-                      className="w-full accent-amber-500 h-1.5 opacity-80 hover:opacity-100 transition-opacity"
-                    />
-                  </div>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => {
-                        const presets = props.mode === '2D' ? ANIMATION_PRESETS_2D : ANIMATION_PRESETS_3D;
-                        if (presets[0]) props.onStartAnimation(presets[0]);
-                      }}
-                      className="flex-1 py-2 rounded-lg text-[10px] font-black uppercase bg-emerald-600/20 hover:bg-emerald-600/40 text-emerald-400 border border-emerald-500/40 transition-all"
-                    >
-                      ▶ Play
-                    </button>
-                    <button
-                      onClick={props.onStopAnimation}
-                      disabled={!props.isAnimating}
-                      className="flex-1 py-2 rounded-lg text-[10px] font-black uppercase bg-rose-600/20 hover:bg-rose-600/40 text-rose-400 border border-rose-500/40 transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-rose-600/20"
-                    >
-                      ⏹ Stop
-                    </button>
-                  </div>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                    {(props.mode === '2D' ? ANIMATION_PRESETS_2D : ANIMATION_PRESETS_3D).map(preset => (
-                      <button
-                        key={preset.id}
-                        onClick={() => props.onStartAnimation(preset)}
-                        className="text-[8px] leading-tight bg-amber-500/5 hover:bg-amber-500/20 text-slate-400 hover:text-amber-300 px-2 py-2.5 rounded border border-slate-800 hover:border-amber-500/30 transition-all font-bold text-center"
-                      >
-                        {preset.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </section>
-
-            {/* Presets Section */}
-            <section className="space-y-4">
-              <div 
-                className="flex justify-between items-center cursor-pointer group"
-                onClick={() => toggleSection('presets')}
-              >
-                <div className="flex items-center gap-2">
-                  <span className={`text-indigo-500 transition-transform ${expanded.presets ? 'rotate-0' : '-rotate-90'}`}>▼</span>
-                  <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-widest group-hover:text-slate-300">Transformation Presets</h3>
-                </div>
-              </div>
-
-              {expanded.presets && (
-                <div className="grid grid-cols-3 gap-2 animate-in fade-in slide-in-from-top-2 duration-300">
+          </>
+            )}
+            {transformSubTab === 'presets' && (
+              <div className="space-y-4 p-1">
+                <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Transformation Presets</h3>
+                <div className="grid grid-cols-2 gap-2">
                   {Object.keys(props.mode === '2D' ? PRESET_TRANSFORMATIONS_2D : PRESET_TRANSFORMATIONS_3D).map(n => (
-                    <button 
-                      key={n} 
+                    <button
+                      key={n}
                       onClick={() => props.mode === '2D' ? props.setMatrix2D(PRESET_TRANSFORMATIONS_2D[n]) : props.setMatrix3D(PRESET_TRANSFORMATIONS_3D[n])}
-                      className="text-[8px] leading-tight bg-indigo-500/5 hover:bg-indigo-500/20 text-slate-400 hover:text-indigo-300 px-1 py-2.5 rounded border border-slate-800 hover:border-indigo-500/30 transition-all font-bold text-center"
+                      className="text-[8px] leading-tight py-2 px-2 rounded border border-slate-700 bg-indigo-500/5 hover:bg-indigo-500/20 text-slate-400 hover:text-indigo-300 transition-all font-bold text-center"
                     >
                       {n}
                     </button>
                   ))}
                 </div>
-              )}
-            </section>
+              </div>
+            )}
           </>
         )}
 

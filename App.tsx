@@ -16,8 +16,13 @@ import { lerpMatrix2D, lerpMatrix3D } from './utils/animateMatrix';
 import { rotation2D, rotation3D, angleFromRotation2D, angleFromRotation3D } from './utils/rotation';
 import { Matrix2x2, Matrix3x3, Vector2D, Vector3D, DimensionMode, ControlTab, SvdStages } from './types';
 import { svd2d, svdEffectiveMatrix } from './utils/svd2d';
+import { GIFEncoder, quantize, applyPalette } from 'gifenc';
+import html2canvas from 'html2canvas';
 
 const STORAGE_KEY = 'linear_lab_stable_v1';
+const GIF_FRAME_DELAY_MS_3D = 100;
+const GIF_FRAME_DELAY_MS_2D = 250;
+const GIF_MAX_WIDTH = 480;
 
 const App: React.FC = () => {
   const [mode, setMode] = useState<DimensionMode>('2D');
@@ -30,7 +35,8 @@ const App: React.FC = () => {
 
   // Tabs (transform | svd | settings) and SVD stage toggles
   const [isAnimating, setIsAnimating] = useState(false);
-  const [animationSpeed, setAnimationSpeed] = useState(1.0); // 0.25x .. 2x
+  const [animationDirection, setAnimationDirection] = useState<'forward' | 'backward' | null>(null); // which button is "playing" (stop on same button)
+  const [animationSpeed, setAnimationSpeed] = useState(1.0); // 0.1x .. 1x
   const animationSpeedRef = useRef(animationSpeed);
   animationSpeedRef.current = animationSpeed;
   const [animationMode, setAnimationMode] = useState<'repeat' | 'bounce'>('repeat');
@@ -43,26 +49,13 @@ const App: React.FC = () => {
   const [svdEllipseColor, setSvdEllipseColor] = useState<string>('#f97316');
   const [rotationAngleDeg, setRotationAngleDeg] = useState(0);
   const [rotationAxis3D, setRotationAxis3D] = useState<'X' | 'Y' | 'Z'>('Z');
+  const [isRecording, setIsRecording] = useState(false);
 
-  // UI States
-  const [isKernelCollapsed, setIsKernelCollapsed] = useState<boolean>(false);
-  const [isPropertiesCollapsed, setIsPropertiesCollapsed] = useState<boolean>(false);
-  const [kernelPosition, setKernelPosition] = useState<{ x: number; y: number }>({ x: 24, y: 24 });
-  const [propertiesPosition, setPropertiesPosition] = useState<{ x: number; y: number }>({ x: 0, y: 24 });
-  const kernelDragRef = useRef({ active: false, startClientX: 0, startClientY: 0, startX: 0, startY: 0 });
-  const propertiesDragRef = useRef({ active: false, startClientX: 0, startClientY: 0, startX: 0, startY: 0 });
-  const kernelJustDraggedRef = useRef(false);
-  const propertiesJustDraggedRef = useRef(false);
-  const kernelPanelRectRef = useRef({ x: 0, y: 0, w: 48, h: 48, collapsed: false });
-  const propertiesPanelRectRef = useRef({ x: 0, y: 0, w: 48, h: 48, collapsed: false });
-  const kernelCollapsedPositionRef = useRef({ x: 24, y: 24 });
-  const propertiesCollapsedPositionRef = useRef({ x: 0, y: 24 });
-  const propertiesInitialPlacementDone = useRef(false);
-  const prevKernelCollapsedRef = useRef(isKernelCollapsed);
-  const prevPropertiesCollapsedRef = useRef(isPropertiesCollapsed);
   const viewerRef = useRef<HTMLDivElement>(null);
-  const kernelRef = useRef<HTMLDivElement>(null);
-  const propertiesRef = useRef<HTMLDivElement>(null);
+  const lastPresetRef = useRef<AnimationPreset2D | AnimationPreset3D | null>(null);
+  const recordIntervalRef = useRef<number | null>(null);
+  const gifEncoderRef = useRef<ReturnType<typeof GIFEncoder> | null>(null);
+  const captureInProgressRef = useRef(false);
   const animationRef = useRef<{
     startTime: number;
     startMatrix2D: Matrix2x2;
@@ -71,11 +64,13 @@ const App: React.FC = () => {
     preset3D?: AnimationPreset3D;
     mode: DimensionMode;
     animationMode: 'repeat' | 'bounce';
+    direction: 'forward' | 'backward';
   } | null>(null);
 
   const resetToDefaults = useCallback(() => {
     animationRef.current = null;
     setIsAnimating(false);
+    setAnimationDirection(null);
     setMatrix2D(INITIAL_MATRIX_2D.map(r => [...r]) as Matrix2x2);
     setMatrix3D(INITIAL_MATRIX_3D.map(r => [...r]) as Matrix3x3);
     setVectors2D(INITIAL_VECTORS_2D.map(v => ({ ...v })));
@@ -91,9 +86,11 @@ const App: React.FC = () => {
     if (m !== animationMode) resetToDefaults(); // on mode switch: stop animation, reset to defaults
   }, [animationMode, resetToDefaults]);
 
-  const startAnimation = useCallback((preset: AnimationPreset2D | AnimationPreset3D) => {
+  const startAnimation = useCallback((preset: AnimationPreset2D | AnimationPreset3D, direction: 'forward' | 'backward' = 'forward') => {
     resetToDefaults(); // reset matrix, vectors, scalar, rotation; then start from defaults
+    lastPresetRef.current = preset;
     setIsAnimating(true);
+    setAnimationDirection(direction);
     const animMode = animationModeRef.current;
     if (mode === '2D' && preset.targetMatrix.length === 2) {
       const p = preset as AnimationPreset2D;
@@ -103,7 +100,8 @@ const App: React.FC = () => {
         startMatrix3D: matrix3D.map(r => [...r]) as Matrix3x3,
         preset2D: p,
         mode: '2D',
-        animationMode: animMode
+        animationMode: animMode,
+        direction
       };
     } else if (mode === '3D' && preset.targetMatrix.length === 3) {
       const p = preset as AnimationPreset3D;
@@ -113,7 +111,8 @@ const App: React.FC = () => {
         startMatrix3D: matrix3D.map(r => [...r]) as Matrix3x3,
         preset3D: p,
         mode: '3D',
-        animationMode: animMode
+        animationMode: animMode,
+        direction
       };
     }
   }, [mode, matrix2D, matrix3D, resetToDefaults]);
@@ -121,6 +120,96 @@ const App: React.FC = () => {
   const stopAnimation = useCallback(() => {
     resetToDefaults();
   }, [resetToDefaults]);
+
+  const startRecording = useCallback(() => {
+    const viewer = viewerRef.current;
+    if (!viewer) return;
+    const is3D = !!viewer.querySelector('canvas');
+    const frameDelayMs = is3D ? GIF_FRAME_DELAY_MS_3D : GIF_FRAME_DELAY_MS_2D;
+    const gif = GIFEncoder();
+    gifEncoderRef.current = gif;
+
+    const captureFrame = async () => {
+      if (captureInProgressRef.current) return;
+      captureInProgressRef.current = true;
+      let sourceCanvas: HTMLCanvasElement;
+      if (is3D) {
+        const c = viewer.querySelector('canvas');
+        if (!c) {
+          captureInProgressRef.current = false;
+          return;
+        }
+        sourceCanvas = c;
+      } else {
+        try {
+          sourceCanvas = await html2canvas(viewer, {
+            useCORS: true,
+            allowTaint: true,
+            backgroundColor: '#0f172a',
+            scale: 0.6,
+            logging: false,
+            windowWidth: viewer.scrollWidth,
+            windowHeight: viewer.scrollHeight,
+          });
+        } catch (e) {
+          console.warn('html2canvas failed', e);
+          captureInProgressRef.current = false;
+          return;
+        }
+      }
+      let w = sourceCanvas.width;
+      let h = sourceCanvas.height;
+      if (w > GIF_MAX_WIDTH) {
+        h = Math.round((h * GIF_MAX_WIDTH) / w);
+        w = GIF_MAX_WIDTH;
+      }
+      const off = document.createElement('canvas');
+      off.width = w;
+      off.height = h;
+      const ctx = off.getContext('2d');
+      if (!ctx) {
+        captureInProgressRef.current = false;
+        return;
+      }
+      ctx.drawImage(sourceCanvas, 0, 0, w, h);
+      const imageData = ctx.getImageData(0, 0, w, h);
+      const data = imageData.data;
+      const palette = quantize(data, 256);
+      const index = applyPalette(data, palette);
+      gif.writeFrame(index, w, h, { palette, delay: frameDelayMs });
+      captureInProgressRef.current = false;
+    };
+
+    const tick = () => {
+      captureFrame();
+    };
+
+    recordIntervalRef.current = window.setInterval(tick, frameDelayMs);
+    setIsRecording(true);
+  }, []);
+
+  const stopRecording = useCallback(() => {
+    if (recordIntervalRef.current != null) {
+      clearInterval(recordIntervalRef.current);
+      recordIntervalRef.current = null;
+    }
+    const gif = gifEncoderRef.current;
+    gifEncoderRef.current = null;
+    if (gif) {
+      gif.finish();
+      const bytes = gif.bytes();
+      if (bytes.length > 0) {
+        const blob = new Blob([new Uint8Array(bytes)], { type: 'image/gif' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `linear-lab-animation-${Date.now()}.gif`;
+        a.click();
+        URL.revokeObjectURL(url);
+      }
+    }
+    setIsRecording(false);
+  }, []);
 
   useEffect(() => {
     let rafId: number;
@@ -140,6 +229,8 @@ const App: React.FC = () => {
                 ? (cycleElapsed - preset.duration) / preset.duration  // 0→1 back: B → A
                 : cycleElapsed / preset.duration)                        // 0→1 there: A → B
             : (preset.loop ? cycleElapsed / preset.duration : Math.min(1, cycleElapsed / preset.duration)); // repeat: 0→1 A→B, then restart
+          // backward = reverse of forward: same timeline t 0→1, but show (1-t) so transformation goes target → start
+          const tEff = anim.direction === 'backward' ? 1 - t : t;
 
           // Rotation presets: interpolate angle (like Rotation block) — no matrix lerp, no scale/shear
           const p2 = anim.preset2D;
@@ -147,23 +238,23 @@ const App: React.FC = () => {
           if (p2 && (p2 as AnimationPreset2D).rotationTargetDeg != null) {
             const startAngle = angleFromRotation2D(anim.startMatrix2D);
             const targetAngle = (p2 as AnimationPreset2D).rotationTargetDeg!;
-            const angle = startAngle + (targetAngle - startAngle) * (isBackPhase ? 1 - t : t);
+            const angle = startAngle + (targetAngle - startAngle) * (isBackPhase ? 1 - tEff : tEff);
             setMatrix2D(rotation2D(angle));
           } else if (p3 && (p3 as AnimationPreset3D).rotationTargetDeg != null && (p3 as AnimationPreset3D).rotationAxis) {
             const axis = (p3 as AnimationPreset3D).rotationAxis!;
             const info = angleFromRotation3D(anim.startMatrix3D);
             const startAngle = info ? info.angle : 0;
             const targetAngle = (p3 as AnimationPreset3D).rotationTargetDeg!;
-            const angle = startAngle + (targetAngle - startAngle) * (isBackPhase ? 1 - t : t);
+            const angle = startAngle + (targetAngle - startAngle) * (isBackPhase ? 1 - tEff : tEff);
             setMatrix3D(rotation3D(axis, angle));
           } else if (anim.mode === '2D' && p2) {
             const start = isBackPhase ? p2.targetMatrix : anim.startMatrix2D;
             const target = isBackPhase ? anim.startMatrix2D : p2.targetMatrix;
-            setMatrix2D(lerpMatrix2D(start, target, t));
+            setMatrix2D(lerpMatrix2D(start, target, tEff));
           } else if (anim.mode === '3D' && p3) {
             const start = isBackPhase ? p3.targetMatrix : anim.startMatrix3D;
             const target = isBackPhase ? anim.startMatrix3D : p3.targetMatrix;
-            setMatrix3D(lerpMatrix3D(start, target, t));
+            setMatrix3D(lerpMatrix3D(start, target, tEff));
           }
         }
       }
@@ -172,87 +263,6 @@ const App: React.FC = () => {
     rafId = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(rafId);
   }, []);
-
-  useEffect(() => {
-    if (propertiesInitialPlacementDone.current) return;
-    const place = () => {
-      const v = viewerRef.current;
-      const p = propertiesRef.current;
-      if (!v || !p) return;
-      const vw = v.offsetWidth;
-      const pw = p.offsetWidth;
-      if (vw < 10) return;
-      const x = Math.max(0, vw - pw - 24);
-      setPropertiesPosition({ x, y: 24 });
-      propertiesCollapsedPositionRef.current = { x, y: 24 };
-      propertiesInitialPlacementDone.current = true;
-    };
-    const t = setTimeout(place, 0);
-    return () => clearTimeout(t);
-  }, []);
-
-  useEffect(() => {
-    if (kernelRef.current) kernelPanelRectRef.current = { x: kernelPosition.x, y: kernelPosition.y, w: kernelRef.current.offsetWidth, h: kernelRef.current.offsetHeight, collapsed: isKernelCollapsed };
-    if (propertiesRef.current) propertiesPanelRectRef.current = { x: propertiesPosition.x, y: propertiesPosition.y, w: propertiesRef.current.offsetWidth, h: propertiesRef.current.offsetHeight, collapsed: isPropertiesCollapsed };
-  }, [kernelPosition, propertiesPosition, isKernelCollapsed, isPropertiesCollapsed]);
-
-  // Sync collapsed position ref when panel is collapsed (so drag updates it). Skip when we just collapsed — current position is still the expanded one; let clamp effect restore and update prev.
-  useEffect(() => {
-    if (!isKernelCollapsed) {
-      prevKernelCollapsedRef.current = false;
-    } else if (prevKernelCollapsedRef.current !== false) {
-      kernelCollapsedPositionRef.current = kernelPosition;
-    }
-    if (!isPropertiesCollapsed) {
-      prevPropertiesCollapsedRef.current = false;
-    } else if (prevPropertiesCollapsedRef.current !== false) {
-      propertiesCollapsedPositionRef.current = propertiesPosition;
-    }
-  }, [isKernelCollapsed, kernelPosition, isPropertiesCollapsed, propertiesPosition]);
-
-  // Keep expanded panels inside viewer; restore collapsed position when collapsing
-  useEffect(() => {
-    const justKernelCollapsed = isKernelCollapsed && !prevKernelCollapsedRef.current;
-    const justPropertiesCollapsed = isPropertiesCollapsed && !prevPropertiesCollapsedRef.current;
-    prevKernelCollapsedRef.current = isKernelCollapsed;
-    prevPropertiesCollapsedRef.current = isPropertiesCollapsed;
-
-    if (justKernelCollapsed) setKernelPosition({ ...kernelCollapsedPositionRef.current });
-    if (justPropertiesCollapsed) setPropertiesPosition({ ...propertiesCollapsedPositionRef.current });
-
-    const clamp = () => {
-      const v = viewerRef.current;
-      const k = kernelRef.current;
-      const p = propertiesRef.current;
-      if (!v) return;
-      const vw = v.offsetWidth;
-      const vh = v.offsetHeight;
-      if (!isKernelCollapsed && k) {
-        const kw = k.offsetWidth;
-        const kh = k.offsetHeight;
-        setKernelPosition(prev => ({
-          x: Math.max(0, Math.min(vw - kw, prev.x)),
-          y: Math.max(0, Math.min(vh - kh, prev.y))
-        }));
-      }
-      if (!isPropertiesCollapsed && p) {
-        const pw = p.offsetWidth;
-        const ph = p.offsetHeight;
-        setPropertiesPosition(prev => ({
-          x: Math.max(0, Math.min(vw - pw, prev.x)),
-          y: Math.max(0, Math.min(vh - ph, prev.y))
-        }));
-      }
-    };
-    const id = setTimeout(clamp, 0);
-    const viewer = viewerRef.current;
-    const ro = viewer ? new ResizeObserver(clamp) : undefined;
-    if (viewer) ro?.observe(viewer);
-    return () => {
-      clearTimeout(id);
-      if (viewer && ro) ro.disconnect();
-    };
-  }, [isKernelCollapsed, isPropertiesCollapsed]);
 
   // Settings
   const [showGrid, setShowGrid] = useState<boolean>(true);
@@ -288,8 +298,6 @@ const App: React.FC = () => {
           if (data.scalar !== undefined) setScalar(data.scalar);
           if (data.showEigenvectors !== undefined) setShowEigenvectors(data.showEigenvectors);
           if (data.gridColor) setGridColor(data.gridColor);
-          if (data.isKernelCollapsed !== undefined) setIsKernelCollapsed(data.isKernelCollapsed);
-          if (data.isPropertiesCollapsed !== undefined) setIsPropertiesCollapsed(data.isPropertiesCollapsed);
         }
       } catch (e) {
         console.warn("State recovery failed", e);
@@ -302,18 +310,17 @@ const App: React.FC = () => {
   useEffect(() => {
     const stateToSave = { 
       mode, matrix2D, vectors2D, matrix3D, vectors3D, 
-      scalar, showEigenvectors, gridColor, showOriginalGrid,
-      isKernelCollapsed, isPropertiesCollapsed
+      scalar, showEigenvectors, gridColor, showOriginalGrid
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(stateToSave));
     setLastSaved(new Date().toLocaleTimeString());
-  }, [mode, matrix2D, vectors2D, matrix3D, vectors3D, scalar, showEigenvectors, gridColor, showOriginalGrid, isKernelCollapsed, isPropertiesCollapsed]);
+  }, [mode, matrix2D, vectors2D, matrix3D, vectors3D, scalar, showEigenvectors, gridColor, showOriginalGrid]);
 
   const handleShare = () => {
     const state = { 
       mode, matrix2D, vectors2D, matrix3D, vectors3D, 
       selectedVectorIdx, scalar, showOriginalGrid, gridColor, originalGridColor,
-      gridThickness, originalGridThickness, showEigenvectors, isKernelCollapsed, isPropertiesCollapsed
+      gridThickness, originalGridThickness, showEigenvectors
     };
     const hash = btoa(JSON.stringify(state));
     window.location.hash = hash;
@@ -409,112 +416,6 @@ const App: React.FC = () => {
     return svdEffectiveMatrix(svdResult2D, svdStages);
   }, [mode, showSvdEllipse, matrix2D, svdResult2D, svdStages]);
 
-  const handleKernelPointerDown = useCallback((e: React.PointerEvent) => {
-    if ((e.target as HTMLElement).closest('[data-no-drag]')) return;
-    const viewer = viewerRef.current;
-    const kernel = kernelRef.current;
-    if (!viewer || !kernel) return;
-    kernelDragRef.current = {
-      active: true,
-      startClientX: e.clientX,
-      startClientY: e.clientY,
-      startX: kernelPosition.x,
-      startY: kernelPosition.y
-    };
-    let didMove = false;
-    const onMove = (ev: PointerEvent) => {
-      didMove = true;
-      const v = viewerRef.current;
-      const k = kernelRef.current;
-      if (!v || !k) return;
-      const { startClientX, startClientY, startX, startY } = kernelDragRef.current;
-      const vr = v.getBoundingClientRect();
-      const kw = k.offsetWidth;
-      const kh = k.offsetHeight;
-      const maxX = Math.max(0, vr.width - kw);
-      const maxY = Math.max(0, vr.height - kh);
-      let newX = Math.max(0, Math.min(maxX, startX + (ev.clientX - startClientX)));
-      let newY = Math.max(0, Math.min(maxY, startY + (ev.clientY - startClientY)));
-      const other = propertiesPanelRectRef.current;
-      const gap = 8;
-      if (other.collapsed && newX + kw + gap > other.x && newX < other.x + other.w + gap && newY + kh + gap > other.y && newY < other.y + other.h + gap) {
-        const overlapLeft = newX + kw + gap - other.x;
-        const overlapRight = other.x + other.w + gap - newX;
-        const overlapTop = newY + kh + gap - other.y;
-        const overlapBottom = other.y + other.h + gap - newY;
-        const minO = Math.min(overlapLeft, overlapRight, overlapTop, overlapBottom);
-        if (minO === overlapLeft) newX = other.x - kw - gap;
-        else if (minO === overlapRight) newX = other.x + other.w + gap;
-        else if (minO === overlapTop) newY = other.y - kh - gap;
-        else newY = other.y + other.h + gap;
-        newX = Math.max(0, Math.min(maxX, newX));
-        newY = Math.max(0, Math.min(maxY, newY));
-      }
-      setKernelPosition({ x: newX, y: newY });
-    };
-    const onUp = () => {
-      kernelDragRef.current.active = false;
-      if (didMove) kernelJustDraggedRef.current = true;
-      document.removeEventListener('pointermove', onMove);
-      document.removeEventListener('pointerup', onUp);
-    };
-    document.addEventListener('pointermove', onMove);
-    document.addEventListener('pointerup', onUp);
-  }, [kernelPosition]);
-
-  const handlePropertiesPointerDown = useCallback((e: React.PointerEvent) => {
-    if ((e.target as HTMLElement).closest('[data-no-drag]')) return;
-    const viewer = viewerRef.current;
-    const panel = propertiesRef.current;
-    if (!viewer || !panel) return;
-    propertiesDragRef.current = {
-      active: true,
-      startClientX: e.clientX,
-      startClientY: e.clientY,
-      startX: propertiesPosition.x,
-      startY: propertiesPosition.y
-    };
-    let didMove = false;
-    const onMove = (ev: PointerEvent) => {
-      didMove = true;
-      const v = viewerRef.current;
-      const p = propertiesRef.current;
-      if (!v || !p) return;
-      const { startClientX, startClientY, startX, startY } = propertiesDragRef.current;
-      const vr = v.getBoundingClientRect();
-      const pw = p.offsetWidth;
-      const ph = p.offsetHeight;
-      const maxX = Math.max(0, vr.width - pw);
-      const maxY = Math.max(0, vr.height - ph);
-      let newX = Math.max(0, Math.min(maxX, startX + (ev.clientX - startClientX)));
-      let newY = Math.max(0, Math.min(maxY, startY + (ev.clientY - startClientY)));
-      const other = kernelPanelRectRef.current;
-      const gap = 8;
-      if (other.collapsed && newX + pw + gap > other.x && newX < other.x + other.w + gap && newY + ph + gap > other.y && newY < other.y + other.h + gap) {
-        const overlapLeft = newX + pw + gap - other.x;
-        const overlapRight = other.x + other.w + gap - newX;
-        const overlapTop = newY + ph + gap - other.y;
-        const overlapBottom = other.y + other.h + gap - newY;
-        const minO = Math.min(overlapLeft, overlapRight, overlapTop, overlapBottom);
-        if (minO === overlapLeft) newX = other.x - pw - gap;
-        else if (minO === overlapRight) newX = other.x + other.w + gap;
-        else if (minO === overlapTop) newY = other.y - ph - gap;
-        else newY = other.y + other.h + gap;
-        newX = Math.max(0, Math.min(maxX, newX));
-        newY = Math.max(0, Math.min(maxY, newY));
-      }
-      setPropertiesPosition({ x: newX, y: newY });
-    };
-    const onUp = () => {
-      propertiesDragRef.current.active = false;
-      if (didMove) propertiesJustDraggedRef.current = true;
-      document.removeEventListener('pointermove', onMove);
-      document.removeEventListener('pointerup', onUp);
-    };
-    document.addEventListener('pointermove', onMove);
-    document.addEventListener('pointerup', onUp);
-  }, [propertiesPosition]);
-
   const transformationMainFormula = useMemo(() => {
     if (mode === '2D') {
       const [[a, b], [c, d]] = displayMatrix2D;
@@ -568,10 +469,6 @@ const App: React.FC = () => {
           <ControlPanel 
             mode={mode}
             isAnimating={isAnimating}
-            animationSpeed={animationSpeed}
-            setAnimationSpeed={setAnimationSpeed}
-            animationMode={animationMode}
-            setAnimationMode={setAnimationModeWithRef}
             activeTab={activeTab} setActiveTab={setActiveTab}
             svdStages={svdStages} setSvdStages={setSvdStages}
             svdResult2D={svdResult2D}
@@ -612,134 +509,42 @@ const App: React.FC = () => {
             }}
             onTranspose={handleTranspose}
             onShare={handleShare}
-            onStartAnimation={startAnimation}
-            onStopAnimation={stopAnimation}
             rotationAngleDeg={rotationAngleDeg}
             setRotationAngleDeg={setRotationAngleDeg}
             rotationAxis3D={rotationAxis3D}
             setRotationAxis3D={setRotationAxis3D}
+            transformationFormula={transformationMainFormula}
           />
         </aside>
 
         <div className="flex-[1.5] lg:flex-1 p-3 lg:p-5 flex flex-col gap-5 overflow-hidden order-1 lg:order-2 bg-slate-950 relative z-10 custom-scrollbar">
           <div ref={viewerRef} className="h-56 sm:h-[360px] lg:flex-1 relative group shrink-0 rounded-xl overflow-hidden border border-slate-800/50 shadow-2xl">
-            
-            {/* Overlay Formula (Kernel) - draggable */}
-            <div 
-              ref={kernelRef}
-              role="presentation"
-              className={`absolute z-30 backdrop-blur-xl rounded-2xl shadow-2xl transition-shadow duration-300 select-none ${isKernelCollapsed ? 'w-12 h-12 p-0 flex items-center justify-center cursor-grab bg-indigo-600 border-2 border-indigo-400 shadow-lg shadow-indigo-500/30 hover:bg-indigo-500 active:cursor-grabbing' : 'p-5 max-w-[90%] overflow-hidden bg-slate-900/50 border border-white/10 border-indigo-500/20 cursor-grab active:cursor-grabbing'}`}
-              style={{ left: kernelPosition.x, top: kernelPosition.y }}
-              onPointerDown={handleKernelPointerDown}
-              onClick={() => {
-                if (!isKernelCollapsed) return;
-                if (kernelJustDraggedRef.current) {
-                  kernelJustDraggedRef.current = false;
-                  return;
-                }
-                setIsKernelCollapsed(false);
-              }}
-            >
-               {!isKernelCollapsed ? (
-                 <>
-                  <div className="flex justify-between items-center mb-3">
-                    <div className="text-[10px] text-indigo-400 font-black uppercase tracking-widest flex items-center gap-2">
-                      <div className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse" />
-                      Transformation Kernel
-                    </div>
-                    <button 
-                      data-no-drag
-                      onClick={(e) => { e.stopPropagation(); setIsKernelCollapsed(true); }}
-                      className="text-slate-500 hover:text-white transition-colors ml-4 cursor-pointer"
-                      title="Minimize"
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" /></svg>
-                    </button>
-                  </div>
-                  <MathFormula formula={transformationMainFormula} className="text-xs md:text-base text-white font-mono" />
-                 </>
-               ) : (
-                 <button className="text-white drop-shadow-md" title="Expand Kernel">
-                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" /></svg>
-                 </button>
-               )}
-            </div>
-
-            {/* Linear Properties Overlay - draggable, semi-transparent */}
-            <div 
-              ref={propertiesRef}
-              role="presentation"
-              className={`absolute z-30 backdrop-blur-md rounded-2xl shadow-2xl transition-shadow duration-300 select-none ${isPropertiesCollapsed ? 'w-12 h-12 p-0 flex items-center justify-center cursor-grab bg-amber-600 border-2 border-amber-400 shadow-lg shadow-amber-500/30 hover:bg-amber-500 active:cursor-grabbing' : 'p-6 min-w-[240px] overflow-hidden bg-slate-900/50 border border-slate-700/50 cursor-grab active:cursor-grabbing'}`}
-              style={{ left: propertiesPosition.x, top: propertiesPosition.y }}
-              onPointerDown={handlePropertiesPointerDown}
-              onClick={() => {
-                if (!isPropertiesCollapsed) return;
-                if (propertiesJustDraggedRef.current) {
-                  propertiesJustDraggedRef.current = false;
-                  return;
-                }
-                setIsPropertiesCollapsed(false);
-              }}
-            >
-              {!isPropertiesCollapsed ? (
-                <>
-                  <div className="flex justify-between items-center mb-4">
-                    <span className="text-[10px] text-slate-500 font-black uppercase tracking-widest">Linear Properties</span>
-                    <div className="flex items-center gap-2">
-                      <div className="px-2 py-0.5 rounded-full bg-indigo-500/10 text-[9px] text-indigo-400 font-bold border border-indigo-500/20 uppercase">Real-Time</div>
-                      <button 
-                        data-no-drag
-                        onClick={(e) => { e.stopPropagation(); setIsPropertiesCollapsed(true); }}
-                        className="text-slate-500 hover:text-white transition-colors cursor-pointer"
-                        title="Minimize"
-                      >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" /></svg>
-                      </button>
-                    </div>
-                  </div>
-                  
-                  <div className="space-y-5">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-1">
-                        <span className="text-[9px] text-slate-500 font-bold uppercase">Det(A)</span>
-                        <div className={`text-base font-mono font-black ${Math.abs(matrixStats.det) < 0.01 ? 'text-rose-400' : 'text-indigo-400'}`}>
-                          {matrixStats.det.toFixed(3)}
-                        </div>
-                      </div>
-                      <div className="space-y-1">
-                        <span className="text-[9px] text-slate-500 font-bold uppercase">Trace(A)</span>
-                        <div className="text-base font-mono font-black text-indigo-300">
-                          {matrixStats.trace.toFixed(3)}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="pt-4 border-t border-slate-800 min-w-0">
-                      <span className="text-[9px] text-slate-500 font-black uppercase tracking-widest block mb-2">Char Polynomial</span>
-                      <div className="bg-slate-950/50 p-3 rounded-xl border border-slate-800 overflow-hidden flex justify-center items-center min-w-0">
-                        <MathFormula formula={matrixStats.charEq} className="text-xs text-white max-w-full overflow-hidden" />
-                      </div>
-                    </div>
-
-                    {matrixStats.eigenvalues && matrixStats.eigenvalues.length > 0 && (
-                      <div className="pt-4 border-t border-slate-800 space-y-3">
-                        <span className="text-[9px] text-slate-500 font-black uppercase tracking-widest block">Eigenvalues (λ)</span>
-                        <div className="flex flex-wrap gap-2">
-                          {matrixStats.eigenvalues.map((ev, i) => (
-                            <div key={i} className="px-3 py-1.5 rounded-lg bg-slate-800/60 border border-slate-700 flex items-center gap-2">
-                               <div className="w-2 h-2 rounded-full" style={{backgroundColor: ev.color}} />
-                               <span className="text-xs font-mono font-bold" style={{color: ev.color}}>{ev.val.toFixed(2)}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </>
-              ) : (
-                <button className="text-white drop-shadow-md" title="Expand Properties">
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                </button>
+            {/* Linear properties bar - one row at top over canvas */}
+            <div className="absolute top-0 left-0 right-0 z-20 flex flex-wrap items-center gap-3 px-3 py-2 bg-slate-900/80 backdrop-blur-sm border-b border-slate-700/50">
+              <div className="flex items-center gap-4 shrink-0">
+                <div className="flex items-baseline gap-2">
+                  <span className="text-[9px] text-slate-500 font-bold uppercase">Det(A)</span>
+                  <span className={`text-sm font-mono font-black ${Math.abs(matrixStats.det) < 0.01 ? 'text-rose-400' : 'text-indigo-400'}`}>{matrixStats.det.toFixed(3)}</span>
+                </div>
+                <div className="flex items-baseline gap-2">
+                  <span className="text-[9px] text-slate-500 font-bold uppercase">Trace(A)</span>
+                  <span className="text-sm font-mono font-black text-indigo-300">{matrixStats.trace.toFixed(3)}</span>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 min-w-0 shrink">
+                <span className="text-[9px] text-slate-500 font-bold uppercase shrink-0">Char</span>
+                <MathFormula formula={matrixStats.charEq} className="text-[10px] text-white overflow-hidden max-w-[200px] sm:max-w-none" />
+              </div>
+              {matrixStats.eigenvalues && matrixStats.eigenvalues.length > 0 && (
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-[9px] text-slate-500 font-bold uppercase shrink-0">λ</span>
+                  {matrixStats.eigenvalues.map((ev, i) => (
+                    <span key={i} className="px-2 py-0.5 rounded bg-slate-800/60 border border-slate-700 text-[10px] font-mono font-bold flex items-center gap-1" style={{ color: ev.color }}>
+                      <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: ev.color }} />
+                      {ev.val.toFixed(2)}
+                    </span>
+                  ))}
+                </div>
               )}
             </div>
 
@@ -777,6 +582,98 @@ const App: React.FC = () => {
                 originalGridThickness={originalGridThickness}
               />
             )}
+
+            {/* Animation presets bar - one row at bottom over canvas */}
+            <div className="absolute bottom-0 left-0 right-0 z-20 flex flex-wrap items-center gap-2 px-3 py-2 bg-slate-900/80 backdrop-blur-sm border-t border-slate-700/50">
+              <div className="flex items-center gap-2 shrink-0">
+                <span className="text-[8px] text-slate-500 font-bold uppercase">Mode</span>
+                <div className="flex rounded overflow-hidden border border-slate-700">
+                  {(['repeat', 'bounce'] as const).map(m => (
+                    <button
+                      key={m}
+                      onClick={() => setAnimationModeWithRef(m)}
+                      className={`px-2 py-1 text-[8px] font-black uppercase ${animationMode === m ? 'bg-amber-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-slate-200'}`}
+                    >
+                      {m}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <span className="text-[8px] text-slate-500 font-bold uppercase">Speed</span>
+                <span className="text-[9px] font-mono font-bold text-amber-400 w-8">{animationSpeed.toFixed(2)}×</span>
+                <input
+                  type="range"
+                  min={0.1}
+                  max={1}
+                  step={0.05}
+                  value={animationSpeed}
+                  onChange={(e) => setAnimationSpeed(parseFloat(e.target.value))}
+                  className="w-16 accent-amber-500 h-1 opacity-80"
+                />
+              </div>
+              {/* Player: Left = play/stop backward, Right = play/stop forward */}
+              <div className="flex items-center gap-1 shrink-0 rounded-lg overflow-hidden border border-slate-600 bg-slate-700/80 shadow-inner">
+                <button
+                  onClick={() => {
+                    const presets = mode === '2D' ? ANIMATION_PRESETS_2D : ANIMATION_PRESETS_3D;
+                    const preset = lastPresetRef.current || presets[0];
+                    if (animationDirection === 'backward') {
+                      stopAnimation();
+                    } else {
+                      if (isAnimating) stopAnimation();
+                      if (preset) startAnimation(preset, 'backward');
+                    }
+                  }}
+                  className="p-2 flex items-center justify-center text-slate-400 hover:text-slate-200 hover:bg-slate-600/60 transition-colors border-r border-slate-600"
+                  title={animationDirection === 'backward' ? 'Stop' : 'Play backward'}
+                >
+                  {animationDirection === 'backward' ? (
+                    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="4" height="12" rx="0.5"/><rect x="14" y="6" width="4" height="12" rx="0.5"/></svg>
+                  ) : (
+                    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M6 12l12-6v12L6 12z"/></svg>
+                  )}
+                </button>
+                <button
+                  onClick={() => {
+                    const presets = mode === '2D' ? ANIMATION_PRESETS_2D : ANIMATION_PRESETS_3D;
+                    const preset = lastPresetRef.current || presets[0];
+                    if (animationDirection === 'forward') {
+                      stopAnimation();
+                    } else {
+                      if (isAnimating) stopAnimation();
+                      if (preset) startAnimation(preset, 'forward');
+                    }
+                  }}
+                  className="p-2 flex items-center justify-center text-slate-400 hover:text-slate-200 hover:bg-slate-600/60 transition-colors"
+                  title={animationDirection === 'forward' ? 'Stop' : 'Play forward'}
+                >
+                  {animationDirection === 'forward' ? (
+                    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="4" height="12" rx="0.5"/><rect x="14" y="6" width="4" height="12" rx="0.5"/></svg>
+                  ) : (
+                    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7L8 5z"/></svg>
+                  )}
+                </button>
+              </div>
+              <div className="flex items-center gap-1.5 flex-wrap min-w-0">
+                {(mode === '2D' ? ANIMATION_PRESETS_2D : ANIMATION_PRESETS_3D).map(preset => (
+                  <button
+                    key={preset.id}
+                    onClick={() => startAnimation(preset)}
+                    className="text-[7px] leading-tight px-2 py-1 rounded border border-slate-700 bg-amber-500/5 hover:bg-amber-500/20 text-slate-400 hover:text-amber-300 font-bold shrink-0"
+                  >
+                    {preset.label}
+                  </button>
+                ))}
+              </div>
+              <button
+                onClick={isRecording ? stopRecording : startRecording}
+                className={`shrink-0 px-3 py-1.5 rounded-lg text-[9px] font-black uppercase border transition-colors ${isRecording ? 'bg-rose-600/30 text-rose-300 border-rose-500/50 hover:bg-rose-600/50' : 'bg-slate-700/80 text-slate-300 border-slate-600 hover:bg-slate-600/80 hover:text-white'}`}
+                title={isRecording ? 'Stop and save GIF' : 'Save animation as GIF (2D & 3D)'}
+              >
+                {isRecording ? '● Stop & save' : 'Save animation'}
+              </button>
+            </div>
           </div>
         </div>
       </main>
