@@ -17,12 +17,12 @@ import { rotation2D, rotation3D, angleFromRotation2D, angleFromRotation3D } from
 import { Matrix2x2, Matrix3x3, Vector2D, Vector3D, DimensionMode, ControlTab, SvdStages } from './types';
 import { svd2d, svdEffectiveMatrix } from './utils/svd2d';
 import { GIFEncoder, quantize, applyPalette } from 'gifenc';
-import html2canvas from 'html2canvas';
 
 const STORAGE_KEY = 'linear_lab_stable_v1';
-const GIF_FRAME_DELAY_MS_3D = 100;
 const GIF_FRAME_DELAY_MS_2D = 250;
 const GIF_MAX_WIDTH = 480;
+const WEBM_FPS = 10;
+const WEBM_BITRATE = 2_500_000;
 
 const App: React.FC = () => {
   const [mode, setMode] = useState<DimensionMode>('2D');
@@ -53,9 +53,10 @@ const App: React.FC = () => {
 
   const viewerRef = useRef<HTMLDivElement>(null);
   const lastPresetRef = useRef<AnimationPreset2D | AnimationPreset3D | null>(null);
-  const recordIntervalRef = useRef<number | null>(null);
   const gifEncoderRef = useRef<ReturnType<typeof GIFEncoder> | null>(null);
-  const captureInProgressRef = useRef(false);
+  const recordingActiveRef = useRef(false);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const recordedChunksRef = useRef<Blob[]>([]);
   const animationRef = useRef<{
     startTime: number;
     startMatrix2D: Matrix2x2;
@@ -124,75 +125,123 @@ const App: React.FC = () => {
   const startRecording = useCallback(() => {
     const viewer = viewerRef.current;
     if (!viewer) return;
-    const is3D = !!viewer.querySelector('canvas');
-    const frameDelayMs = is3D ? GIF_FRAME_DELAY_MS_3D : GIF_FRAME_DELAY_MS_2D;
-    const gif = GIFEncoder();
-    gifEncoderRef.current = gif;
+    const canvas = viewer.querySelector('canvas');
+    const svg = viewer.querySelector('svg');
+    const is3D = !!canvas;
 
-    const captureFrame = async () => {
-      if (captureInProgressRef.current) return;
-      captureInProgressRef.current = true;
-      let sourceCanvas: HTMLCanvasElement;
-      if (is3D) {
-        const c = viewer.querySelector('canvas');
-        if (!c) {
-          captureInProgressRef.current = false;
-          return;
-        }
-        sourceCanvas = c;
-      } else {
-        try {
-          sourceCanvas = await html2canvas(viewer, {
-            useCORS: true,
-            allowTaint: true,
-            backgroundColor: '#0f172a',
-            scale: 0.6,
-            logging: false,
-            windowWidth: viewer.scrollWidth,
-            windowHeight: viewer.scrollHeight,
-          });
-        } catch (e) {
-          console.warn('html2canvas failed', e);
-          captureInProgressRef.current = false;
-          return;
-        }
+    if (is3D && canvas instanceof HTMLCanvasElement) {
+      // 3D: MediaRecorder + captureStream — reliable WebM
+      try {
+        const stream = canvas.captureStream(WEBM_FPS);
+        const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
+          ? 'video/webm;codecs=vp9'
+          : 'video/webm';
+        const recorder = new MediaRecorder(stream, {
+          mimeType,
+          videoBitsPerSecond: WEBM_BITRATE,
+        });
+        recordedChunksRef.current = [];
+        recorder.ondataavailable = (e) => {
+          if (e.data.size > 0) recordedChunksRef.current.push(e.data);
+        };
+        recorder.onstop = () => {
+          const chunks = recordedChunksRef.current;
+          mediaRecorderRef.current = null;
+          recordedChunksRef.current = [];
+          if (chunks.length > 0) {
+            const blob = new Blob(chunks, { type: mimeType });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `linear-lab-animation-${Date.now()}.webm`;
+            a.click();
+            URL.revokeObjectURL(url);
+          }
+          setIsRecording(false);
+        };
+        recorder.start(500);
+        mediaRecorderRef.current = recorder;
+        setIsRecording(true);
+      } catch (e) {
+        console.warn('MediaRecorder failed', e);
       }
-      let w = sourceCanvas.width;
-      let h = sourceCanvas.height;
-      if (w > GIF_MAX_WIDTH) {
-        h = Math.round((h * GIF_MAX_WIDTH) / w);
-        w = GIF_MAX_WIDTH;
-      }
-      const off = document.createElement('canvas');
-      off.width = w;
-      off.height = h;
-      const ctx = off.getContext('2d');
-      if (!ctx) {
-        captureInProgressRef.current = false;
-        return;
-      }
-      ctx.drawImage(sourceCanvas, 0, 0, w, h);
-      const imageData = ctx.getImageData(0, 0, w, h);
-      const data = imageData.data;
-      const palette = quantize(data, 256);
-      const index = applyPalette(data, palette);
-      gif.writeFrame(index, w, h, { palette, delay: frameDelayMs });
-      captureInProgressRef.current = false;
-    };
+      return;
+    }
 
-    const tick = () => {
-      captureFrame();
-    };
+    if (!is3D && svg) {
+      // 2D: sequential SVG → canvas → GIF (no html2canvas)
+      recordingActiveRef.current = true;
+      const gif = GIFEncoder();
+      gifEncoderRef.current = gif;
+      const frameDelayMs = GIF_FRAME_DELAY_MS_2D;
 
-    recordIntervalRef.current = window.setInterval(tick, frameDelayMs);
-    setIsRecording(true);
+      const captureOneFrame = (): Promise<void> => {
+        return new Promise((resolve) => {
+          const svgEl = viewer.querySelector('svg');
+          if (!svgEl || !recordingActiveRef.current) {
+            resolve();
+            return;
+          }
+          const w = svgEl.clientWidth || 400;
+          const h = svgEl.clientHeight || 300;
+          const serialized = new XMLSerializer().serializeToString(svgEl);
+          const blob = new Blob([serialized], { type: 'image/svg+xml;charset=utf-8' });
+          const url = URL.createObjectURL(blob);
+          const img = new Image();
+          img.onload = () => {
+            URL.revokeObjectURL(url);
+            let cw = w;
+            let ch = h;
+            if (cw > GIF_MAX_WIDTH) {
+              ch = Math.round((ch * GIF_MAX_WIDTH) / cw);
+              cw = GIF_MAX_WIDTH;
+            }
+            const off = document.createElement('canvas');
+            off.width = cw;
+            off.height = ch;
+            const ctx = off.getContext('2d');
+            if (!ctx) {
+              resolve();
+              return;
+            }
+            ctx.fillStyle = '#0f172a';
+            ctx.fillRect(0, 0, cw, ch);
+            ctx.drawImage(img, 0, 0, cw, ch);
+            const imageData = ctx.getImageData(0, 0, cw, ch);
+            const data = imageData.data;
+            const palette = quantize(data, 256);
+            const index = applyPalette(data, palette);
+            gif.writeFrame(index, cw, ch, { palette, delay: frameDelayMs });
+            resolve();
+          };
+          img.onerror = () => {
+            URL.revokeObjectURL(url);
+            resolve();
+          };
+          img.src = url;
+        });
+      };
+
+      const scheduleNext = () => {
+        if (!recordingActiveRef.current) return;
+        captureOneFrame().then(() => {
+          if (recordingActiveRef.current) setTimeout(scheduleNext, frameDelayMs);
+        });
+      };
+      requestAnimationFrame(() => setTimeout(scheduleNext, 50));
+      setIsRecording(true);
+    }
   }, []);
 
   const stopRecording = useCallback(() => {
-    if (recordIntervalRef.current != null) {
-      clearInterval(recordIntervalRef.current);
-      recordIntervalRef.current = null;
+    recordingActiveRef.current = false;
+
+    const mr = mediaRecorderRef.current;
+    if (mr && mr.state !== 'inactive') {
+      mr.stop();
+      return;
     }
+
     const gif = gifEncoderRef.current;
     gifEncoderRef.current = null;
     if (gif) {
@@ -669,7 +718,7 @@ const App: React.FC = () => {
               <button
                 onClick={isRecording ? stopRecording : startRecording}
                 className={`shrink-0 px-3 py-1.5 rounded-lg text-[9px] font-black uppercase border transition-colors ${isRecording ? 'bg-rose-600/30 text-rose-300 border-rose-500/50 hover:bg-rose-600/50' : 'bg-slate-700/80 text-slate-300 border-slate-600 hover:bg-slate-600/80 hover:text-white'}`}
-                title={isRecording ? 'Stop and save GIF' : 'Save animation as GIF (2D & 3D)'}
+                title={isRecording ? 'Stop and save' : 'Save animation (2D → GIF, 3D → WebM)'}
               >
                 {isRecording ? '● Stop & save' : 'Save animation'}
               </button>
